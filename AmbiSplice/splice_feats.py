@@ -105,15 +105,16 @@ def get_train_feats_single_rna(rna_feats,
         print(f"Seq Length: {seq_len}\nChunk starts: {chunk_starts}\nChunk ends: {chunk_ends}")
 
     train_feats = []
-    for rna_start, rna_end in zip(chunk_starts, chunk_ends):
-        train_feat = {'start': rna_start, 'end': rna_end}
+    for chunk_start, chunk_end in zip(chunk_starts, chunk_ends):
+        # chunk_end - chunk_start <= chunk_size always (< if gene is shorter than chunk_size)
+        train_feat = {'chunk_start': chunk_start, 'chunk_end': chunk_end}
 
         # seq_start and seq_end include flanking regions
-        seq_start = max(0, rna_start - flank_size)
-        seq_end = min(seq_len, rna_end + flank_size)
+        seq_start = max(0, chunk_start - flank_size)
+        seq_end = min(seq_len, chunk_end + flank_size)
 
         pad_size = total_size - (seq_end - seq_start)
-        left_pad = flank_size - (rna_start - seq_start)
+        left_pad = flank_size - (chunk_start - seq_start)
         right_pad = pad_size - left_pad
         
         # pad with 'N's if needed for input X
@@ -137,17 +138,17 @@ def get_train_feats_single_rna(rna_feats,
         train_feat['psi_mask'] = train_feat['psi_mask'][flank_size:flank_size + chunk_size] # not used currently
 
         # parts of Y labels may be padding if the entire sequence is shorter than chunk_size
-        train_feat['chunk_mask'] = np.zeros(chunk_size, dtype=np.int32)
+        # train_feat['chunk_mask'] = np.zeros(chunk_size, dtype=np.int32)
         # the actual start of the seq[start:end] within the chunk_size region of seq
-        y_start = left_pad + (rna_start - seq_start) - flank_size
-        y_end = y_start + (rna_end - rna_start)
-        train_feat['chunk_mask'][y_start:y_end] = 1
+        # y_start = left_pad + (chunk_start - seq_start) - flank_size
+        # y_end = y_start + (chunk_end - chunk_start)
+        # train_feat['chunk_mask'][y_start:y_end] = 1
 
-        if min_sites and np.sum(train_feat['cls'] * train_feat['chunk_mask']) <= min_sites:
+        if min_sites and np.sum(train_feat['cls'][:chunk_end-chunk_start]) <= min_sites:
             # print(f"Skipping gene_id: {train_feat['gene_id']}; start: {train_feat['start']}; end: {train_feat['end']} with <= {min_sites} splice sites!")
             continue
 
-        if min_usage and np.sum(train_feat['psi'] * train_feat['chunk_mask']) < min_usage:
+        if min_usage and np.sum(train_feat['psi'][:chunk_end-chunk_start]) < min_usage:
             # print(f"Skipping gene_id: {train_feat['gene_id']}; start: {train_feat['start']}; end: {train_feat['end']} with <= {min_usage} usage!")
             continue
 

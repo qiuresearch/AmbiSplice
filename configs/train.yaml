@@ -1,93 +1,46 @@
+project: AmbiSplice
+debug: false
+model:
+  dropout: 0.1
+  loss: se3_vf_loss
+  loss_scale_cls: 0.5
+  loss_scale_psi: 0.5
 dataset:
-  training: true
-  home_dir: /home/xqiu/database/rna3db
-  train_dir:
-  val_dir:
-  meta_data: rna3db.pkl
-  filtering:
-    max_len: 200
-    min_len: 30
-  train_size: 1000
-  val_size: 50
-  weighted_sampling: true
-  dynamic_weights: true
-  stratified_sampling: chrom
+  train_size: 6000
+  val_size: 1000
+  dynamic_weights: false
+  weighted_sampling: false
+  stratified_sampling: null
   samples_per_eval_length: 1
   num_eval_lengths: 1
 dataloader:
-  batch_size: 2
-  max_batch_size: 1
-  max_squared_res: 375000
-  max_num_res_squared: 375000
-  eval_batch_size: 16
-  num_workers: 8
+  batch_size: 32
+  train_batch_size: 64
+  val_batch_size: 128
+  test_batch_size: 128
+  predict_batch_size: 512
+  num_workers: 32
   prefetch_factor: 100
-model:
-  node_embed_size: 256
-  edge_embed_size: 128
-  symmetric: false
-  node_features:
-    c_s: ${model.node_embed_size}
-    c_pos_emb: 128
-    c_timestep_emb: 128
-    embed_diffuse_mask: false
-    max_num_res: 2000
-    timestep_int: 1000
-  edge_features:
-    single_bias_transition_n: 2
-    c_s: ${model.node_embed_size}
-    c_p: ${model.edge_embed_size}
-    relpos_k: 64
-    use_rbf: true
-    num_rbf: 32
-    feat_dim: 64
-    num_bins: 22
-    self_condition: true
-  ipa:
-    c_s: ${model.node_embed_size}
-    c_z: ${model.edge_embed_size}
-    c_hidden: 128
-    no_heads: 8
-    no_qk_points: 8
-    no_v_points: 12
-    seq_tfmr_num_heads: 4
-    seq_tfmr_num_layers: 2
-    num_blocks: 6
-    ss: 3
-    dropout: 0.1
 run:
-  debug: false
   seed: 123
-  num_devices: 4
+  num_devices: 1
   gpu_num: 7
   warm_start: null
   warm_start_cfg_override: false
-  use_swa: false
-  batch_ot:
-    enabled: true
-    cost: kabsch
-    noise_per_sample: 1
-    permute: false
-  training:
-    min_plddt_mask: null
-    loss: se3_vf_loss
-    bb_atom_scale: 0.1
-    trans_scale: 0.1
-    translation_loss_weight: 2.0
-    t_normalize_clip: 0.9
-    rotation_loss_weights: 1.0
-    aux_loss_weight: 1.0
-    aux_loss_t_pass: 0.25
-    tors_loss_scale: 1.0
-    num_non_frame_atoms: 1
   wandb:
     name: debugging
-    project: OmniSplice
+    project: ${project}
     save_code: false
     tags: []
     mode: online
   optimizer:
-    lr: 0.0001
+    learning_rate: 0.001
+    eps: 1e-8
+    lr_scheduler: CosineAnnealingWarmRestarts
+    lr_interval: epoch
+    lr_T_0: 3
+    lr_T_mult: 2
+    last_lr_step: -1
   trainer:
     overfit_batches: 0
     min_epochs: 2
@@ -95,10 +48,21 @@ run:
     max_time: "00:20:00:00"
     accelerator: gpu
     log_every_n_steps: 1
-    deterministic: true
+    deterministic: false
     strategy: ddp
     check_val_every_n_epoch: 1
     accumulate_grad_batches: 1
+  callbacks:
+    early_stopping:
+      monitor: val/loss
+      mode: min
+      patience: 10
+      strict: true
+      verbose: false
+    lr_monitor:
+      logging_interval: step
+      log_momentum: false
+      log_lr: true
   checkpoints:
     dirpath: checkpoints/
     filename: '{epoch:03d}-{step:06d}'
@@ -107,4 +71,4 @@ run:
     monitor: train/loss
     mode: min
     every_n_epochs: 1
-folding_cfg: null
+    every_n_train_steps: null
