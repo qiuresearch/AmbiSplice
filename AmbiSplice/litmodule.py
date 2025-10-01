@@ -36,17 +36,14 @@ def summarize_tensors(vars_dict, prefix=''):
 
 def summarize_epoch_metrics(epoch_metrics, prefix='', logger=None, logger_prefix='val/epoch_'):
     """ Display epoch metrics (a list of dicts) in a formatted table. """
-    if prefix:
-        print(f"\n{prefix} Epoch Metrics:")
-    else:
-        print("\nEpoch Metrics:")
 
     if not epoch_metrics or len(epoch_metrics) == 0:
         print("No epoch metrics to summarize.")
         return
 
-    avg_metrics = epoch_metrics[0]
+    print(f"\n{prefix} Epoch Metrics:")
 
+    avg_metrics = epoch_metrics[0]
     for batch_metrics in epoch_metrics[1:]:
         for k, v in batch_metrics.items():
             if k in avg_metrics:
@@ -277,13 +274,13 @@ class OmniMainModule(LightningModule):
 
         preds = self.model(batch_feats)
         if self._train_steps == 0:
-            summarize_tensors(preds, prefix='Model Predictions')
+            summarize_tensors(preds, prefix='Training Predictions')
 
         loss, loss_items = self.model.calc_loss(preds, batch_feats)
         loss_items.update(self.model.calc_metric(preds, batch_feats))
         self.train_epoch_metrics.append(loss_items)
         if self._train_steps == 0:
-            summarize_tensors(loss_items, prefix='Loss Items')
+            summarize_tensors(loss_items, prefix='Training Loss Items')
         
         self.log("train/loss", loss, prog_bar=True)
         self._train_steps += 1
@@ -300,7 +297,7 @@ class OmniMainModule(LightningModule):
             sync_dist=True
         )
         self._epoch_start_time = time.time()
-        self.log("trainer/epoch", self.current_epoch, prog_bar=False, logger=True)
+        # self.log("trainer/epoch", self.current_epoch, prog_bar=False, logger=True)
 
         if len(self.train_epoch_metrics) > 0:
             summarize_epoch_metrics(
@@ -313,21 +310,15 @@ class OmniMainModule(LightningModule):
 
     def on_validation_epoch_start(self):
         return super().on_validation_epoch_start()
-    
+
+    @torch.no_grad()
     def validation_step(self, batch_feats, batch_idx=None):
-        if self._validation_steps == 0:
-            summarize_tensors(batch_feats, prefix='Validation Step Input')
         
-        preds = self.model.validate(batch_feats)
-        if self._validation_steps == 0:
-            summarize_tensors(preds, prefix='Validation Step Output')
+        preds = self.model(batch_feats)
 
         loss, loss_items = self.model.calc_loss(preds, batch_feats)
         loss_items.update(self.model.calc_metric(preds, batch_feats))
         self.validation_epoch_metrics.append(loss_items)
-
-        if self._validation_steps == 0:
-            summarize_tensors(loss_items, prefix='Validation Loss Items')
 
         self._validation_steps += 1
         self.log("val/loss", loss, prog_bar=True)
@@ -356,6 +347,7 @@ class OmniMainModule(LightningModule):
 
         return super().on_validation_epoch_end()
 
+    @torch.no_grad()
     def predict_step(self, batch_feats, batch_idx=None):
         if self._predict_steps == 0:
             summarize_tensors(batch_feats, prefix='Predict Step Input')

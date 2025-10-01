@@ -7,8 +7,8 @@ import pandas as pd
 from . import splice_feats
 
 class SpliceDataset(Dataset):
-    def __init__(self, meta_df, epoch_size=None, data_home='',cache_home='/tmp',
-                 weighted_sampling=False, dynamic_weights=True, min_quality=0.5,
+    def __init__(self, meta_df, epoch_size=None, data_dir='', cache_dir='/tmp',
+                 weighted_sampling=False, dynamic_weights=True, min_quality=None,
                  stratified_sampling=None, sampling_method=None, 
                  seed_start=42, training=False, samples_per_seq=1,
                  **kwargs):
@@ -40,35 +40,21 @@ class SpliceDataset(Dataset):
         elif not isinstance(meta_df, pd.DataFrame):
             raise ValueError("meta_df must be a pandas DataFrame.")
         
-        self.meta_df = meta_df
+        self.meta_df = meta_df.reset_index(drop=True)
         self.epoch_size = len(meta_df) if epoch_size is None else epoch_size
-        if self.epoch_size > len(meta_df):
-            print(f"Warning: epoch_size {self.epoch_size} is greater than number of samples {len(meta_df)}.")
-            self.epoch_size = len(meta_df)
-            
-        self.data_home = data_home
-        if self.data_home and not os.path.exists(data_home):
-            raise FileNotFoundError(f"Home directory {data_home} does not exist.")
+  
+        self.data_dir = data_dir
+        if self.data_dir and not os.path.exists(data_dir):
+            raise FileNotFoundError(f"Home directory {data_dir} does not exist.")
 
         self.cache_feats = {} # this stores precomputed features if any
-        self.cache_dir = cache_home
-        if not os.path.exists(cache_home):
-            os.makedirs(cache_home)
+        self.cache_dir = cache_dir
+        if not os.path.exists(cache_dir): os.makedirs(cache_dir)
        
         self.training = training
         self.min_quality = min_quality
 
         # Set up customized sampling options
-        self.weighted_sampling = weighted_sampling
-        self.dynamic_weights = dynamic_weights
-        if weighted_sampling:
-            if 'sampling_weight' not in meta_df.columns:
-                raise ValueError("weighted_sampling is True but 'sampling_weight' column is missing in meta_df.")
-        if 'sampling_weight' in meta_df.columns:      
-            self.iweight = self.meta_df.columns.get_loc('sampling_weight')
-        else:
-            self.iweight = None  # Default to None if not present
-
         if stratified_sampling:
             print(f"Using stratified sampling based on column: {stratified_sampling}")
             meta_groups = self.meta_df.groupby(stratified_sampling)
@@ -85,20 +71,52 @@ class SpliceDataset(Dataset):
             self.stratified_sampling = False
             self.all_ilocs = np.arange(len(meta_df))
 
+        self.dynamic_weights = dynamic_weights
+        self.weighted_sampling = weighted_sampling
+        if weighted_sampling:
+            if weighted_sampling not in meta_df.columns:
+                raise ValueError("weighted_sampling is True but column <{}> is missing in meta_df.".format(weighted_sampling))
+            self.iweight = self.meta_df.columns.get_loc(weighted_sampling)
+        else:
+            self.iweight = None  # Default to None if not present
+
         self.sampling_method = sampling_method # not yet implemented
-        if sampling_method is not None:
+        if sampling_method:
             if sampling_method not in ['random', 'sequential']:
                 raise ValueError("sampling_method must be 'random' or 'sequential'.")
-            
-        self.customized_sampling = sampling_method is not None or stratified_sampling is not None or weighted_sampling
+
+        self.customized_sampling = (self.stratified_sampling or
+                                    self.sampling_method or 
+                                    self.weighted_sampling)
+
+        if not self.customized_sampling and self.epoch_size > len(meta_df):
+            print(f"Warning: epoch_size {self.epoch_size} is greater than number of samples {len(meta_df)}.")
+            self.epoch_size = len(meta_df)
+
+        # display the state of the dataset in a nice format
+        print(f"SpliceDataset initialized:")
+        print(f"               training: {self.training}")
+        print(f"           len(meta_df): {len(self.meta_df)}")
+        print(f"             epoch_size: {self.epoch_size}")
+        print(f"               data_dir: {self.data_dir}")
+        print(f"              cache_dir: {self.cache_dir}")
+        print(f"            min_quality: {self.min_quality}")
+        print(f"    customized_sampling: {self.customized_sampling}")
+        print(f"    stratified_sampling: {self.stratified_sampling}")
+        print(f"     stratified_ngroups: {self.stratified_ngroups}, e.g., {self.stratified_names[:5]}...")
+        print(f"      weighted_sampling: {self.weighted_sampling}")
+        print(f"        dynamic_weights: {self.dynamic_weights}")
+        # print(f"    sampling_method: {self.sampling_method if self.sampling_method else 'None'}")
+        # print(f"    seed_start: {seed_start}")
+        # print(f"  samples_per_seq: {samples_per_seq}")
 
     def __len__(self):
-        return len(self.meta_df) if self.epoch_size is None else self.epoch_size
+        return self.epoch_size
 
     def __getitem__(self, idx):
 
-        if idx < 0 or idx >= len(self.meta_df):
-            raise IndexError(f"Index:{idx} out of bounds for SpliceDataset (len: {len(self.meta_df)}).")
+        if idx < 0 or idx >= self.epoch_size:
+            raise IndexError(f"Index:{idx} out of bounds for SpliceDataset (epoch_size: {self.epoch_size}).")
 
         sample_feats = None
         while sample_feats is None:
@@ -108,6 +126,9 @@ class SpliceDataset(Dataset):
 
     def omni_sampler(self, idx, min_quality=None):
         """ Customized sampling logic based on the configuration """
+
+        if idx >= len(self.meta_df):
+            idx = idx % len(self.meta_df)
 
         if min_quality is None:
             min_quality = self.min_quality
@@ -134,12 +155,11 @@ class SpliceDataset(Dataset):
             else:
                 idx = np.random.choice(iloc_set)
         
-        gene_ds = self.meta_df.iloc[idx]
-
         # check cache_feats if idx exists        
         if idx in self.cache_feats and len(self.cache_feats[idx]):
             sample_feats = self.cache_feats[idx].pop(-1)
         else:
+            gene_ds = self.meta_df.iloc[idx]
             gene_feats = splice_feats.sprinkle_sites_onto_vectors(
                 gene_ds, 
                 # training=self.training,

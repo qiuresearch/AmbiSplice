@@ -109,6 +109,9 @@ class PangolinSingle(nn.Module):
         return {'cls': out1, 'psi': out2}
 
     def calc_loss(self, preds, labels):
+        """ preds are the output of forward() without any activation
+            labels are the ground truth in the batch_feats
+        """
 
         # TODO::
         # 1) Many sequences are shorter than chunk_size, so we need to mask out the padded regions
@@ -119,28 +122,35 @@ class PangolinSingle(nn.Module):
         loss_items = {}
         
         # four classes: non, acceptor, donor, hybrid
-        loss_items['cls_loss'] = F.cross_entropy(preds['cls'], labels['cls'].float(),
-                                            ignore_index=-100)
+        loss_items['cls_loss'] = F.cross_entropy(
+            preds['cls'],
+            labels['cls'].long(),
+            ignore_index=-100)
+
         # squeeze out the channel dimension for psi
         loss_items['psi_loss'] = F.binary_cross_entropy_with_logits(
-            preds['psi'].squeeze(dim=1), labels['psi'],
+            preds['psi'].squeeze(dim=1),
+            labels['psi'],
             reduction='mean')
 
         loss = loss_items['cls_loss'] + loss_items['psi_loss']
-        loss_items['total_loss'] = loss
+        loss_items['loss'] = loss
 
-        for k in loss_items:
-            loss_items[k] = loss_items[k].detach()
+        for k in loss_items: # do not move to cpu here, let the caller do it
+            loss_items[k] = loss_items[k].detach() 
 
         return loss, loss_items
 
     @torch.no_grad()
     def calc_metric(self, preds, labels, eps=1e-8):
+        """ preds are the output of forward() without any activation
+            labels are the ground truth in the batch_feats
+        """
         metric_items = {}
 
         # compute precision, recall, f1 for cls
         cls_pred = F.softmax(preds['cls'], dim=1).permute(0, 2, 1)  # (B, chunk_size, 4)
-        cls_label = F.one_hot(labels['cls'], num_classes=4).float()  # (B, chunk_size, 4)
+        cls_label = F.one_hot(labels['cls'], num_classes=cls_pred.shape[-1]).float()  # (B, chunk_size, 4)
 
         cls_tp = (cls_pred * cls_label).sum(dim=(0, 1))  # (4,)
         cls_fp = (cls_pred * (1 - cls_label)).sum(dim=(0, 1))  # (4,)
@@ -156,9 +166,10 @@ class PangolinSingle(nn.Module):
         
         # compute mse for psi
         preds_psi = torch.sigmoid(preds['psi'])
-        preds_psi = preds_psi.view(-1)
-        labels_psi = labels['psi'].view(-1)
-        metric_items['psi_mse'] = F.mse_loss(preds_psi, labels_psi)
+        metric_items['psi_mse'] = F.mse_loss(
+            preds_psi.view(-1),
+            labels['psi'].view(-1),
+            reduction='mean')
 
         return metric_items
 
@@ -170,10 +181,6 @@ class PangolinSingle(nn.Module):
         preds['psi'] = torch.sigmoid(preds['psi'])
         
         return preds
-    
-    def validate(self, batch_feats):
-        return self.predict(batch_feats)
-    
     
 
 class Pangolin(nn.Module):
