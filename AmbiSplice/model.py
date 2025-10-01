@@ -114,9 +114,9 @@ class PangolinSingle(nn.Module):
         """
 
         # TODO::
-        # 1) Many sequences are shorter than chunk_size, so we need to mask out the padded regions
-        # cls has shape (B, 4, chunk_size)
-        # psi has shape (B, 1, chunk_size)
+        # 1) Many sequences are shorter than crop_size, so we need to mask out the padded regions
+        # cls has shape (B, 4, crop_size)
+        # psi has shape (B, 1, crop_size)
         # 2) cls_odds and psi_std are not used currently
 
         loss_items = {}
@@ -149,8 +149,8 @@ class PangolinSingle(nn.Module):
         metric_items = {}
 
         # compute precision, recall, f1 for cls
-        cls_pred = F.softmax(preds['cls'], dim=1).permute(0, 2, 1)  # (B, chunk_size, 4)
-        cls_label = F.one_hot(labels['cls'], num_classes=cls_pred.shape[-1]).float()  # (B, chunk_size, 4)
+        cls_pred = F.softmax(preds['cls'], dim=1).permute(0, 2, 1)  # (B, crop_size, 4)
+        cls_label = F.one_hot(labels['cls'], num_classes=cls_pred.shape[-1]).float()  # (B, crop_size, 4)
 
         cls_tp = (cls_pred * cls_label).sum(dim=(0, 1))  # (4,)
         cls_fp = (cls_pred * (1 - cls_label)).sum(dim=(0, 1))  # (4,)

@@ -11,7 +11,7 @@ class SpliceDataset(Dataset):
                  weighted_sampling=False, dynamic_weights=True, min_quality=None,
                  stratified_sampling=None, sampling_method=None, 
                  seed_start=42, training=False, samples_per_seq=1,
-                 **kwargs):
+                 summarize=False, **kwargs):
         
         """
         PyTorch Dataset for RNA splice sites.
@@ -93,22 +93,23 @@ class SpliceDataset(Dataset):
             print(f"Warning: epoch_size {self.epoch_size} is greater than number of samples {len(meta_df)}.")
             self.epoch_size = len(meta_df)
 
-        # display the state of the dataset in a nice format
-        print(f"SpliceDataset initialized:")
-        print(f"               training: {self.training}")
-        print(f"           len(meta_df): {len(self.meta_df)}")
-        print(f"             epoch_size: {self.epoch_size}")
-        print(f"               data_dir: {self.data_dir}")
-        print(f"              cache_dir: {self.cache_dir}")
-        print(f"            min_quality: {self.min_quality}")
-        print(f"    customized_sampling: {self.customized_sampling}")
-        print(f"    stratified_sampling: {self.stratified_sampling}")
-        print(f"     stratified_ngroups: {self.stratified_ngroups}, e.g., {self.stratified_names[:5]}...")
-        print(f"      weighted_sampling: {self.weighted_sampling}")
-        print(f"        dynamic_weights: {self.dynamic_weights}")
-        # print(f"    sampling_method: {self.sampling_method if self.sampling_method else 'None'}")
-        # print(f"    seed_start: {seed_start}")
-        # print(f"  samples_per_seq: {samples_per_seq}")
+        if summarize:
+            # display the state of the dataset in a nice format
+            print(f"SpliceDataset summary:")
+            print(f"               training: {self.training}")
+            print(f"           len(meta_df): {len(self.meta_df)}")
+            print(f"             epoch_size: {self.epoch_size}")
+            print(f"               data_dir: {self.data_dir}")
+            print(f"              cache_dir: {self.cache_dir}")
+            print(f"            min_quality: {self.min_quality}")
+            print(f"    customized_sampling: {self.customized_sampling}")
+            print(f"    stratified_sampling: {self.stratified_sampling}")
+            print(f"     stratified_ngroups: {self.stratified_ngroups}, e.g., {self.stratified_names[:5]}...")
+            print(f"      weighted_sampling: {self.weighted_sampling}")
+            print(f"        dynamic_weights: {self.dynamic_weights}")
+            # print(f"    sampling_method: {self.sampling_method if self.sampling_method else 'None'}")
+            # print(f"    seed_start: {seed_start}")
+            # print(f"  samples_per_seq: {samples_per_seq}")
 
     def __len__(self):
         return self.epoch_size
@@ -166,7 +167,8 @@ class SpliceDataset(Dataset):
                 )
             gene_feats = splice_feats.get_train_feats_single_rna(
                 gene_feats,
-                chunk_size=5000,
+                num_crops=10,
+                crop_size=5000,
                 flank_size=5000,
                 min_sites=0,
                 min_usage=0,

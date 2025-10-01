@@ -19,14 +19,14 @@ dataset:
   stratified_sampling: chrom
   dynamic_weights: false
   weighted_sampling: null
-run:
+litrun:
   seed: 123
   num_devices: 1
   gpu_num: 7
   warm_start: null
   warm_start_cfg_override: false
   wandb:
-    name: debugging
+    name: model
     project: ${project}
     save_code: false
     tags: []
@@ -54,7 +54,7 @@ run:
     early_stopping:
       monitor: val/loss
       mode: min
-      patience: 7
+      patience: 23
       strict: true
       verbose: true
     lr_monitor:

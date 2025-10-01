@@ -75,14 +75,20 @@ def sprinkle_sites_onto_vectors(rna_sites, debug=False):
             }
 
 
-def get_train_feats_single_rna(rna_feats,
-                               chunk_size=5000, flank_size=5000,
+def get_train_feats_single_rna(rna_feats, num_crops=None,
+                               crop_size=5000, flank_size=5000,
                                min_sites=0, min_usage=0,
                                debug=False):
-    """ Generate training features for a single RNA transcript by chunking the sequence
+    """ Generate training features for a single RNA transcript by croping the sequence
     Args:
         rna_feats: dict, output of sprinkle_sites_onto_vectors
-        rna_seq: str, RNA sequence"""
+        num_crops: int, number of crops to generate, if None, generate all possible crops
+        crop_size: int, size of the crop (excluding flanking regions)
+        flank_size: int, size of the flanking regions on each side
+        min_sites: int, minimum number of splice sites in the crop to be included
+        min_usage: float, minimum total usage (psi) in the crop to be included
+        debug: bool, whether to print debug information
+    """
     rna_seq = rna_feats['seq']
     rna_cls = rna_feats['cls']
     rna_cls_odds = rna_feats['cls_odds']
@@ -91,30 +97,36 @@ def get_train_feats_single_rna(rna_feats,
     rna_psi_std = rna_feats['psi_std']
     rna_psi_mask = rna_feats['psi_mask']
     
-    total_size = chunk_size + 2 * flank_size
+    total_size = crop_size + 2 * flank_size
 
-    # divide gene_lsv into chunks of chunk_size 
+    # divide gene_lsv into crops of crop_size 
     seq_len = len(rna_seq)
-    chunk_starts = np.arange(0, seq_len, chunk_size)
-    chunk_starts[-1] = max([0, seq_len - chunk_size])  # ensure last chunk reaches the end
+    crop_starts = np.arange(0, seq_len, crop_size)
+    crop_starts[-1] = max([0, seq_len - crop_size])  # ensure last crop reaches the end
 
-    chunk_ends = chunk_starts + chunk_size
-    chunk_ends[-1] = seq_len  # ensure last chunk reaches the end
+    crop_ends = crop_starts + crop_size
+    crop_ends[-1] = seq_len  # ensure last crop reaches the end
 
     if debug:
-        print(f"Seq Length: {seq_len}\nChunk starts: {chunk_starts}\nChunk ends: {chunk_ends}")
+        print(f"Seq Length: {seq_len}\ncrop starts: {crop_starts}\ncrop ends: {crop_ends}")
 
+    # randomly pick num_crops pairs of crop_starts and crop_ends
+    if num_crops is not None and num_crops > 0 and num_crops < len(crop_starts):
+        selected_indices = np.random.choice(len(crop_starts), size=num_crops, replace=False)
+        crop_starts = crop_starts[selected_indices]
+        crop_ends = crop_ends[selected_indices]
+        
     train_feats = []
-    for chunk_start, chunk_end in zip(chunk_starts, chunk_ends):
-        # chunk_end - chunk_start <= chunk_size always (< if gene is shorter than chunk_size)
-        train_feat = {'chunk_start': chunk_start, 'chunk_end': chunk_end}
+    for crop_start, crop_end in zip(crop_starts, crop_ends):
+        # crop_end - crop_start <= crop_size always (< if gene is shorter than crop_size)
+        train_feat = {'crop_start': crop_start, 'crop_end': crop_end}
 
         # seq_start and seq_end include flanking regions
-        seq_start = max(0, chunk_start - flank_size)
-        seq_end = min(seq_len, chunk_end + flank_size)
+        seq_start = max(0, crop_start - flank_size)
+        seq_end = min(seq_len, crop_end + flank_size)
 
         pad_size = total_size - (seq_end - seq_start)
-        left_pad = flank_size - (chunk_start - seq_start)
+        left_pad = flank_size - (crop_start - seq_start)
         right_pad = pad_size - left_pad
         
         # pad with 'N's if needed for input X
@@ -129,26 +141,26 @@ def get_train_feats_single_rna(rna_feats,
         train_feat['psi_std'] = np.pad(rna_psi_std[seq_start:seq_end], (left_pad, right_pad), 'constant')
         train_feat['psi_mask'] = np.pad(rna_psi_mask[seq_start:seq_end], (left_pad, right_pad), 'constant')
 
-        # target Y only has the middle chunk_size region excluding flanks
-        train_feat['cls'] = train_feat['cls'][flank_size:flank_size + chunk_size]
-        train_feat['cls_odds'] = train_feat['cls_odds'][flank_size:flank_size + chunk_size]
-        train_feat['cls_mask'] = train_feat['cls_mask'][flank_size:flank_size + chunk_size] # not used currently
-        train_feat['psi'] = train_feat['psi'][flank_size:flank_size + chunk_size]
-        train_feat['psi_std'] = train_feat['psi_std'][flank_size:flank_size + chunk_size]
-        train_feat['psi_mask'] = train_feat['psi_mask'][flank_size:flank_size + chunk_size] # not used currently
+        # target Y only has the middle crop_size region excluding flanks
+        train_feat['cls'] = train_feat['cls'][flank_size:flank_size + crop_size]
+        train_feat['cls_odds'] = train_feat['cls_odds'][flank_size:flank_size + crop_size]
+        train_feat['cls_mask'] = train_feat['cls_mask'][flank_size:flank_size + crop_size] # not used currently
+        train_feat['psi'] = train_feat['psi'][flank_size:flank_size + crop_size]
+        train_feat['psi_std'] = train_feat['psi_std'][flank_size:flank_size + crop_size]
+        train_feat['psi_mask'] = train_feat['psi_mask'][flank_size:flank_size + crop_size] # not used currently
 
-        # parts of Y labels may be padding if the entire sequence is shorter than chunk_size
-        # train_feat['chunk_mask'] = np.zeros(chunk_size, dtype=np.int32)
-        # the actual start of the seq[start:end] within the chunk_size region of seq
-        # y_start = left_pad + (chunk_start - seq_start) - flank_size
-        # y_end = y_start + (chunk_end - chunk_start)
-        # train_feat['chunk_mask'][y_start:y_end] = 1
+        # parts of Y labels may be padding if the entire sequence is shorter than crop_size
+        # train_feat['crop_mask'] = np.zeros(crop_size, dtype=np.int32)
+        # the actual start of the seq[start:end] within the crop_size region of seq
+        # y_start = left_pad + (crop_start - seq_start) - flank_size
+        # y_end = y_start + (crop_end - crop_start)
+        # train_feat['crop_mask'][y_start:y_end] = 1
 
-        if min_sites and np.sum(train_feat['cls'][:chunk_end-chunk_start]) <= min_sites:
+        if min_sites and np.sum(train_feat['cls'][:crop_end-crop_start]) <= min_sites:
             # print(f"Skipping gene_id: {train_feat['gene_id']}; start: {train_feat['start']}; end: {train_feat['end']} with <= {min_sites} splice sites!")
             continue
 
-        if min_usage and np.sum(train_feat['psi'][:chunk_end-chunk_start]) < min_usage:
+        if min_usage and np.sum(train_feat['psi'][:crop_end-crop_start]) < min_usage:
             # print(f"Skipping gene_id: {train_feat['gene_id']}; start: {train_feat['start']}; end: {train_feat['end']} with <= {min_usage} usage!")
             continue
 
