@@ -75,7 +75,7 @@ def sprinkle_sites_onto_vectors(rna_sites, debug=False):
             }
 
 
-def get_train_feats_single_rna(rna_feats, num_crops=None,
+def get_train_feats_single_rna(rna_feats, num_crops=None, 
                                crop_size=5000, flank_size=5000,
                                min_sites=0, min_usage=0,
                                debug=False):

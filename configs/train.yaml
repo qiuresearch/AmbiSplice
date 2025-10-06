@@ -1,36 +1,36 @@
-project: AmbiSplice
 debug: false
+stage: train
+gpus: [0]
+project: AmbiSplice
 model:
+  debug: ${debug}
   dropout: 0.1
   loss: se3_vf_loss
   loss_scale_cls: 0.5
   loss_scale_psi: 0.5
 dataloader:
+  debug: ${debug}
   batch_size: 64
   train_batch_size: 64
   val_batch_size: 128
   test_batch_size: 128
   predict_batch_size: 512
-  num_workers: 8
-  prefetch_factor: 4
+  num_workers: 2
+  prefetch_factor: 2
 dataset:
+  debug: ${debug}
   train_size: 32000
   val_size: 6400
+  test_size: 6400
+  predict_size: 6400
   stratified_sampling: chrom
   dynamic_weights: false
   weighted_sampling: null
 litrun:
+  debug: ${debug}
   seed: 123
-  num_devices: 1
-  gpu_num: 7
-  warm_start: null
-  warm_start_cfg_override: false
-  wandb:
-    name: model
-    project: ${project}
-    save_code: false
-    tags: []
-    mode: online
+  resume_from_ckpt: null
+  resume_model_weights_only: true
   optimizer:
     learning_rate: 0.0007
     eps: 1e-8
@@ -45,22 +45,26 @@ litrun:
     max_epochs: 100
     max_time: "5:20:13:14"  # D:HH:MM:SS
     accelerator: gpu
+    strategy: auto
     log_every_n_steps: 1
     deterministic: false
-    strategy: ddp
     check_val_every_n_epoch: 1
     accumulate_grad_batches: 1
-  callbacks:
-    early_stopping:
-      monitor: val/loss
-      mode: min
-      patience: 23
-      strict: true
-      verbose: true
-    lr_monitor:
-      logging_interval: step
-      log_momentum: false
-      log_lr: true
+  wandb:
+    name: model
+    project: ${project}
+    save_code: false
+    tags: []
+    mode: online
+  early_stopping:
+    monitor: train/loss # val/loss
+    mode: min
+    patience: 23
+    strict: true
+    verbose: true
+  lr_monitor:
+    logging_interval: step
+    log_momentum: false
   checkpoints:
     dirpath: checkpoints/
     filename: '{epoch:03d}-{step:06d}'

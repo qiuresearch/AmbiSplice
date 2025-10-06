@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 
 from . import splice_feats
+from . import utils
 
 class SpliceDataset(Dataset):
     def __init__(self, meta_df, epoch_size=None, data_dir='', cache_dir='/tmp',
@@ -32,6 +33,8 @@ class SpliceDataset(Dataset):
             **kwargs: Additional keyword arguments.
         """
         super(SpliceDataset, self).__init__()
+
+        self.is_child_process = utils.get_rank() # utils.is_child_process()
 
         if isinstance(meta_df, str):
             if not os.path.exists(meta_df):
@@ -93,7 +96,7 @@ class SpliceDataset(Dataset):
             print(f"Warning: epoch_size {self.epoch_size} is greater than number of samples {len(meta_df)}.")
             self.epoch_size = len(meta_df)
 
-        if summarize:
+        if summarize and not self.is_child_process:
             # display the state of the dataset in a nice format
             print(f"SpliceDataset summary:")
             print(f"               training: {self.training}")

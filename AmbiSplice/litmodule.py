@@ -3,6 +3,7 @@ import time
 import datetime
 from beartype.typing import Any, Dict, Optional
 from omegaconf import DictConfig, OmegaConf
+import socket
 import wandb
 
 import torch
@@ -73,7 +74,22 @@ def summarize_epoch_metrics(epoch_metrics, prefix='', logger=None, logger_prefix
                     on_step=False,
                     on_epoch=True,
                     prog_bar=False,
+                    sync_dist=True,
+                    rank_zero_only=False,
             )
+
+
+def has_wandb_connectivity(host="api.wandb.ai", port=443, timeout=2.0):
+    try:
+        s = socket.create_connection((host, port), timeout)
+        s.close()
+        return True
+    except OSError:
+        return False
+
+
+def load_model_state_dict(model, state_dict_path):
+    pass
 
 
 class NanGradientCallback(Callback):
@@ -97,6 +113,9 @@ class OmniDataModule(LightningDataModule):
                  batch_size=4, num_workers=4, sampler=None, collater=None,
                  **kwargs):
         super().__init__()
+        
+        self.is_child_process = utils.is_child_process()
+        
         self.train_dataset = train_dataset
         self.val_dataset = val_dataset
         self.test_dataset = test_dataset
@@ -108,6 +127,7 @@ class OmniDataModule(LightningDataModule):
         self.collater = collater # not used yet
 
         self._extra_cfg = kwargs
+
 
     def train_dataloader(self):
         return DataLoader(self.train_dataset, 
@@ -151,9 +171,11 @@ class OmniDataModule(LightningDataModule):
         pass
 
 
-class OmniMainModule(LightningModule):
+class OmniRunModule(LightningModule):
     def __init__(self, model, cfg=None, **kwargs):
         super().__init__()
+
+        self.is_child_process = utils.get_rank() # utils.is_child_process()
 
         self.model = model
         self.cfg = {} if cfg is None else cfg
@@ -171,6 +193,7 @@ class OmniMainModule(LightningModule):
         self._validation_steps = 0
         self._predict_steps = 0
 
+        self.last_lr_step = -1
         self.save_hyperparameters(ignore=['model'])
 
     def _log_scalar(
@@ -196,6 +219,56 @@ class OmniMainModule(LightningModule):
             sync_dist=sync_dist,
             rank_zero_only=rank_zero_only
         )
+
+    def resume_last_lr_step(self, lr_step):
+        self.last_lr_step = lr_step
+
+
+    def resume_from_ckpt(self, ckpt_path=None):
+
+        cfg = self.cfg
+        if cfg.resume_from_ckpt and not cfg.resume_model_weights_only: # actual parameter loading is done by the trainer
+            if(os.path.isdir(cfg.resume_from_ckpt)):
+                pass
+                # last_global_step = get_global_step_from_zero_checkpoint(cfg.resume_from_ckpt)
+            else:
+                sd = torch.load(cfg.resume_from_ckpt, map_location=torch.device("cpu"))
+                last_global_step = int(sd['global_step'])
+            self.resume_last_lr_step(last_global_step)
+            ilogger.info(f"Successfully loaded last lr step: {self.last_lr_step}")
+            
+        if(cfg.resume_from_ckpt and cfg.resume_model_weights_only):
+            if(os.path.isdir(cfg.resume_from_ckpt)):
+                pass
+                # sd = get_fp32_state_dict_from_zero_checkpoint(cfg.resume_from_ckpt)
+            else:
+                ilogger.info("Loading model weights only...")
+                sd = torch.load(cfg.resume_from_ckpt, map_location=torch.device("cpu"))
+
+            if 'state_dict' in sd:
+                sd = {k[len("net."):]:v for k,v in sd['state_dict'].items() if k.startswith("net.")}
+            elif 'module' in sd:
+                sd = {k[len("_forward_module.net."):]:v for k,v in sd['module'].items() if k.startswith("_forward_module.net.")}
+            else:
+                ilogger.warning("No state_dict or module found in checkpoint, loading the whole checkpoint...")
+                print("No state_dict or module found in checkpoint, loading the whole checkpoint...")
+
+            # print the state_dict keys of self.net
+            # print(self.net.state_dict().keys())
+
+            self.model.load_state_dict(sd, strict=False)
+            ilogger.info(f"Successfully loaded model weights: {cfg.resume_from_ckpt}")
+
+        # if(args.resume_from_jax_params):
+        #     self.net.load_from_jax(args.resume_from_jax_params)
+        #     logging.info(f"Successfully loaded JAX parameters at {args.resume_from_jax_params}...")
+
+        # if(args.resume_from_jax_params is not None and args.resume_from_ckpt is not None):
+            # raise ValueError("Choose between loading pretrained Jax-weights and a checkpoint-path")
+            
+        # TorchScript components of the model (commented out by QiuResearch)
+        # if(args.script_modules):
+        #     script_preset_(self)        
 
     def forward(self, batch_feats):
         return self.model(batch_feats)
@@ -293,16 +366,16 @@ class OmniMainModule(LightningModule):
         return super().on_train_epoch_start()
 
     def training_step(self, batch_feats, batch_idx=None):
-        if self._train_steps == 0:
+        if self._train_steps == 0 and not self.is_child_process:
             summarize_tensors(batch_feats, prefix='Training Step Input')
 
         preds = self.model(batch_feats)
-        if self._train_steps == 0:
+        if self._train_steps == 0 and not self.is_child_process:
             summarize_tensors(preds, prefix='Training Predictions')
 
         loss, loss_items = self.model.calc_loss(preds, batch_feats)
         loss_items.update(self.model.calc_metric(preds, batch_feats))
-        if self._train_steps == 0:
+        if self._train_steps == 0 and not self.is_child_process:
             summarize_tensors(loss_items, prefix='Training Loss Items')
         
         self.log("train/loss", loss, prog_bar=True)
@@ -318,12 +391,13 @@ class OmniMainModule(LightningModule):
             on_step=False,
             on_epoch=True,
             prog_bar=False,
-            sync_dist=True
+            sync_dist=True,
+            rank_zero_only=False,
         )
         self._epoch_start_time = time.time()
         # self.log("trainer/epoch", self.current_epoch, prog_bar=False, logger=True)
 
-        if len(self.train_epoch_metrics) > 0:
+        if len(self.train_epoch_metrics) > 0 and not self.is_child_process:
             summarize_epoch_metrics(
                 self.train_epoch_metrics,
                 prefix='Training',
@@ -356,11 +430,12 @@ class OmniMainModule(LightningModule):
             on_step=False,
             on_epoch=True,
             prog_bar=False,
-            sync_dist=True
+            sync_dist=True,
+            rank_zero_only=False,
         )
         self._epoch_start_time = time.time()
 
-        if len(self.validation_epoch_metrics) > 0:
+        if len(self.validation_epoch_metrics) > 0 and not self.is_child_process:
             summarize_epoch_metrics(
                 self.validation_epoch_metrics,
                 prefix='Validation',
@@ -384,26 +459,25 @@ class OmniMainModule(LightningModule):
         return (batch_feats, preds)
 
 
-    def fit(self, datamodule, cfg=None, devices=None, run_cfg=None, debug=False, **kwargs):
+    def fit(self, datamodule, cfg=None, accelerator="cuda", devices="auto", save_cfg=None, debug=False, **kwargs):
         """ Fit the model using PyTorch Lightning Trainer.
         Args:
             datamodule: LightningDataModule
             cfg: DictConfig, configuration for training, if None, use self.cfg
             devices: list of int, GPU device ids to use, if None, use all available
-            run_cfg: DictConfig, configuration for the entire run, soley for the purpose of saving
+            save_cfg: DictConfig, configuration for the entire run, soley for the purpose of saving
         """
-
-        if devices is None:
-            devices = [0]
 
         cfg = self.cfg if cfg is None else \
             OmegaConf.merge(self.cfg, cfg, OmegaConf.create(kwargs))
-            
-        if cfg.get('warm_start', None) is not None and cfg.get('warm_start_cfg_override', False):
-            ilogger.info(f"Warm starting from {cfg.warm_start} with config override...")
+
+        if cfg.get('resume_from_ckpt') and cfg.get('resume_cfg_override'):
+            ilogger.info(f"Resume from {cfg.resume_from_ckpt} with config override...")
             pass # to be implemented
-        elif cfg.get('warm_start', None) is not None:
-            ilogger.info(f"Warm starting from {cfg.warm_start} without config override...")
+        elif cfg.get('resume_from_ckpt'):
+            ilogger.info(f"Resume from {cfg.resume_from_ckpt} without config override...")
+        elif cfg.get('resume_model_weights'):
+            pass
 
         torch_model = self.model
         checkpoints_cfg = cfg['checkpoints']
@@ -432,8 +506,8 @@ class OmniMainModule(LightningModule):
             checkpoints_cfg['dirpath'] = save_dir
             ilogger.info(f"Checkpoints saved to {save_dir}")
             callbacks.append(ModelCheckpoint(**checkpoints_cfg))
-            callbacks.append(LearningRateMonitor(logging_interval='step'))
-            callbacks.append(EarlyStopping(**cfg.callbacks.early_stopping))
+            callbacks.append(LearningRateMonitor(**cfg.lr_monitor))
+            callbacks.append(EarlyStopping(**cfg.early_stopping))
             callbacks.append(NanGradientCallback())
             # if cfg.run.trainer.progress_bar_refresh_rate > 0:
                 # callbacks.append(RichProgressBar(refresh_rate=cfg.run.trainer.progress_bar_refresh_rate))
@@ -443,9 +517,9 @@ class OmniMainModule(LightningModule):
                 # ilogger.warning("Anomaly detection is enabled. Training will be slow!")
                 #
 
-        # run_conf is solely for saving purposes
-        if run_cfg is not None:
-            save_cfg = OmegaConf.merge(run_cfg, OmegaConf.create({'litrun': cfg}))
+        # save_conf is solely for saving purposes
+        if save_cfg is not None:
+            save_cfg = OmegaConf.merge(save_cfg, OmegaConf.create({'litrun': cfg}))
         else:
             save_cfg = cfg
 
@@ -456,9 +530,10 @@ class OmniMainModule(LightningModule):
             wandb_logger.experiment.config.update(flat_cfg)
 
         os.makedirs(save_dir, exist_ok=True)
-        cfg_path = os.path.join(save_dir, 'train.yaml')
-        with open(cfg_path, 'w') as f:
-            OmegaConf.save(config=save_cfg, f=f.name)
+        if not self.is_child_process:
+            cfg_path = os.path.join(save_dir, 'train.yaml')
+            with open(cfg_path, 'w') as f:
+                OmegaConf.save(config=save_cfg, f=f.name)
 
         checkpoints_cfg['dirpath'] = ckpt_home # restore the orignal home
 
@@ -468,6 +543,7 @@ class OmniMainModule(LightningModule):
             cfg.trainer.deterministic = False
             # cfg.run.trainer.fast_dev_run = True
         except NameError:
+                        
             pass
 
         trainer = Trainer(
