@@ -90,18 +90,18 @@ def get_train_feats_single_rna(rna_feats, num_crops=None,
         debug: bool, whether to print debug information
     """
     rna_seq = rna_feats['seq']
-    rna_cls = rna_feats['cls']
-    rna_cls_odds = rna_feats['cls_odds']
-    rna_cls_mask = rna_feats['cls_mask']
-    rna_psi = rna_feats['psi']
-    rna_psi_std = rna_feats['psi_std']
-    rna_psi_mask = rna_feats['psi_mask']
-    
+    rna_cls = rna_feats['cls'].astype(np.int64)
+    rna_cls_odds = rna_feats['cls_odds'].astype(np.float32)
+    rna_cls_mask = rna_feats['cls_mask'].astype(np.int32)
+    rna_psi = rna_feats['psi'].astype(np.float32)
+    rna_psi_std = rna_feats['psi_std'].astype(np.float32)
+    rna_psi_mask = rna_feats['psi_mask'].astype(np.int32)
+
     total_size = crop_size + 2 * flank_size
 
     # divide gene_lsv into crops of crop_size 
     seq_len = len(rna_seq)
-    crop_starts = np.arange(0, seq_len, crop_size)
+    crop_starts = np.arange(0, seq_len, crop_size, dtype=np.int32)
     crop_starts[-1] = max([0, seq_len - crop_size])  # ensure last crop reaches the end
 
     crop_ends = crop_starts + crop_size

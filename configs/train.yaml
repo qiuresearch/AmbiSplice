@@ -17,7 +17,7 @@ dataloader:
   val_batch_size: 128
   test_batch_size: 128
   predict_batch_size: 512
-  num_workers: 2
+  num_workers: 4
   prefetch_factor: 2
 dataset:
   debug: ${debug}
@@ -43,12 +43,13 @@ litrun:
     lr_T_mult: 2
     last_lr_step: -1
   trainer:
-    overfit_batches: 0
     min_epochs: 2
     max_epochs: 100
     max_time: "5:20:13:14"  # D:HH:MM:SS
     accelerator: gpu
     strategy: auto
+    precision: 32
+    overfit_batches: 0
     log_every_n_steps: 1
     deterministic: false
     check_val_every_n_epoch: 1

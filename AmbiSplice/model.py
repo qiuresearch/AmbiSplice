@@ -124,7 +124,7 @@ class PangolinSingle(nn.Module):
         # four classes: non, acceptor, donor, hybrid
         loss_items['cls_loss'] = F.cross_entropy(
             preds['cls'],
-            labels['cls'].long(),
+            labels['cls'],
             ignore_index=-100)
 
         # squeeze out the channel dimension for psi
@@ -150,7 +150,7 @@ class PangolinSingle(nn.Module):
 
         # compute precision, recall, f1 for cls
         cls_pred = F.softmax(preds['cls'], dim=1).permute(0, 2, 1)  # (B, crop_size, 4)
-        cls_label = F.one_hot(labels['cls'], num_classes=cls_pred.shape[-1]).float()  # (B, crop_size, 4)
+        cls_label = F.one_hot(labels['cls'], num_classes=cls_pred.shape[-1]).to(cls_pred.dtype)  # (B, crop_size, 4)
 
         cls_tp = (cls_pred * cls_label).sum(dim=(0, 1))  # (4,)
         cls_fp = (cls_pred * (1 - cls_label)).sum(dim=(0, 1))  # (4,)

@@ -251,7 +251,6 @@ class OmniRunModule(LightningModule):
                 sd = {k[len("_forward_module.net."):]:v for k,v in sd['module'].items() if k.startswith("_forward_module.net.")}
             else:
                 ilogger.warning("No state_dict or module found in checkpoint, loading the whole checkpoint...")
-                print("No state_dict or module found in checkpoint, loading the whole checkpoint...")
 
             # print the state_dict keys of self.net
             # print(self.net.state_dict().keys())
@@ -348,7 +347,7 @@ class OmniRunModule(LightningModule):
         else:
             raise ValueError(f"Unsupported lr_scheduler: {lr_scheduler}")
 
-        print(f'Using {lr_scheduler} learning rate scheduler...')
+        ilogger.info(f'Using {lr_scheduler} learning rate scheduler...')
         return {
             "optimizer": optimizer,
             "lr_scheduler": {

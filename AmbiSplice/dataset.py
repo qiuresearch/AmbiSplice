@@ -7,6 +7,8 @@ import pandas as pd
 from . import splice_feats
 from . import utils
 
+ilogger = utils.get_pylogger(__name__)
+
 class SpliceDataset(Dataset):
     def __init__(self, meta_df, epoch_size=None, summarize=False,
                  data_dir='./', enable_cache=False, cache_dir='/tmp',
@@ -61,7 +63,7 @@ class SpliceDataset(Dataset):
 
         # Set up customized sampling options
         if stratified_sampling:
-            print(f"Using stratified sampling based on column: {stratified_sampling}")
+            ilogger.info(f"Using stratified sampling based on column: {stratified_sampling}")
             meta_groups = self.meta_df.groupby(stratified_sampling)
             if meta_groups.ngroups <= 1:
                 raise ValueError(f"Less than 1 group found for stratified_sampling: {stratified_sampling}. Check your meta_df.")
@@ -71,7 +73,7 @@ class SpliceDataset(Dataset):
             self.stratified_ngroups = len(group_indices)
             self.stratified_names = list(group_indices.keys())
             self.stratified_ilocs = list(group_indices.values())
-            print(f"Found {self.stratified_ngroups} groups for stratified sampling, e.g., {self.stratified_names[:5]}...")
+            ilogger.info(f"Found {self.stratified_ngroups} groups for stratified sampling, e.g., {self.stratified_names[:5]}...")
         else:
             self.stratified_sampling = False
             self.all_ilocs = np.arange(len(meta_df))
@@ -105,7 +107,7 @@ class SpliceDataset(Dataset):
             print(f"           len(meta_df): {len(self.meta_df)}")
             print(f"             epoch_size: {self.epoch_size}")
             print(f"               data_dir: {self.data_dir}")
-            print(f"              cache_dir: {self.cache_dir}")
+            print(f"              cache_dir: {self.cache_dir if self.enable_cache else 'None'}")
             print(f"            min_quality: {self.min_quality}")
             print(f"    customized_sampling: {self.customized_sampling}")
             print(f"    stratified_sampling: {self.stratified_sampling}")
@@ -155,7 +157,7 @@ class SpliceDataset(Dataset):
                 weights = self.meta_df.iloc[iloc_set, self.iweight].values
                 total_weight = weights.sum()
                 if total_weight == 0:
-                    print(f"Error: Total weight is zero, cannot sample from {self.meta_df.iloc[iloc_set, self.iid].to_list()}.")
+                    ilogger.warning(f"Error: Total weight is zero, cannot sample from {self.meta_df.iloc[iloc_set, self.iid].to_list()}.")
                     return None
                 idx = np.random.choice(iloc_set, p=weights/total_weight)
             else:
@@ -172,13 +174,13 @@ class SpliceDataset(Dataset):
                 )
             gene_feats = splice_feats.get_train_feats_single_rna(
                 gene_feats,
-                num_crops=10,
+                num_crops=11 if self.enable_cache else 1,
                 crop_size=5000,
                 flank_size=5000,
                 min_sites=0,
                 min_usage=0,
                 )
-            if len(gene_feats) > 1:
+            if self.enable_cache and len(gene_feats) > 1:
                 self.cache_feats[idx] = gene_feats
                 sample_feats = self.cache_feats[idx].pop(-1)
             else:
@@ -187,10 +189,10 @@ class SpliceDataset(Dataset):
         if sample_feats is None:
             if self.weighted_sampling and self.dynamic_weights:
                 self.meta_df.iloc[idx, self.iweight] = 0.0
-            print(f"Warning: Sample features for index {idx} are None, skipping.")
+            ilogger.warning(f"Warning: Sample features for index {idx} are None, skipping.")
             return None
-        
-        if self.stage and self.iweight and self.dynamic_weights:
+
+        if self.dynamic_weights:
             self.meta_df.iloc[idx, self.iweight] = sample_feats['target_feats']['quality'].item()
 
         if self.stage:
