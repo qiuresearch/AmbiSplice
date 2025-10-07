@@ -496,11 +496,11 @@ class OmniRunModule(LightningModule):
             wandb_logger = WandbLogger(**cfg.wandb)
             ilogger.info(f"Wandb logger initialized with name: {wandb_logger.experiment.name}, id: {wandb_logger.experiment.id}")
 
-            if cfg.warm_start is None:
+            if cfg.resume_from_ckpt is None:
                 save_dir = os.path.join(ckpt_home, f'{cfg.wandb.name}_{wandb_logger.experiment.id}')
             else:
-                save_dir = os.path.dirname(cfg.warm_start)
-                # ckpt_dir = os.path.join(ckpt_dir, wandb_logger.experiment.id, cfg.run.warm_start)
+                save_dir = os.path.dirname(cfg.resume_from_ckpt)
+                # ckpt_dir = os.path.join(ckpt_dir, wandb_logger.experiment.id, cfg.wandb.name)
 
             # Model checkpoints
             checkpoints_cfg['dirpath'] = save_dir

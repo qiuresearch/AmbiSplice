@@ -1,3 +1,5 @@
+# defaults:
+#   - _self_
 debug: false
 stage: train
 gpus: [0]
@@ -26,6 +28,7 @@ dataset:
   stratified_sampling: chrom
   dynamic_weights: false
   weighted_sampling: null
+  enable_cache: false
 litrun:
   debug: ${debug}
   seed: 123

@@ -8,12 +8,12 @@ from . import splice_feats
 from . import utils
 
 class SpliceDataset(Dataset):
-    def __init__(self, meta_df, epoch_size=None, data_dir='', cache_dir='/tmp',
+    def __init__(self, meta_df, epoch_size=None, summarize=False,
+                 data_dir='./', enable_cache=False, cache_dir='/tmp',
                  weighted_sampling=False, dynamic_weights=True, min_quality=None,
                  stratified_sampling=None, sampling_method=None, 
-                 seed_start=42, training=False, samples_per_seq=1,
-                 summarize=False, **kwargs):
-        
+                 seed_start=42, stage=False, samples_per_seq=1,
+                 **kwargs):
         """
         PyTorch Dataset for RNA splice sites.
 
@@ -50,11 +50,13 @@ class SpliceDataset(Dataset):
         if self.data_dir and not os.path.exists(data_dir):
             raise FileNotFoundError(f"Home directory {data_dir} does not exist.")
 
-        self.cache_feats = {} # this stores precomputed features if any
-        self.cache_dir = cache_dir
-        if not os.path.exists(cache_dir): os.makedirs(cache_dir)
+        self.enable_cache = enable_cache
+        if self.enable_cache:
+            self.cache_feats = {}
+            self.cache_dir = cache_dir
+            if not os.path.exists(cache_dir): os.makedirs(cache_dir)
        
-        self.training = training
+        self.stage = stage
         self.min_quality = min_quality
 
         # Set up customized sampling options
@@ -99,7 +101,7 @@ class SpliceDataset(Dataset):
         if summarize and not self.is_child_process:
             # display the state of the dataset in a nice format
             print(f"SpliceDataset summary:")
-            print(f"               training: {self.training}")
+            print(f"               training: {self.stage}")
             print(f"           len(meta_df): {len(self.meta_df)}")
             print(f"             epoch_size: {self.epoch_size}")
             print(f"               data_dir: {self.data_dir}")
@@ -158,9 +160,9 @@ class SpliceDataset(Dataset):
                 idx = np.random.choice(iloc_set, p=weights/total_weight)
             else:
                 idx = np.random.choice(iloc_set)
-        
-        # check cache_feats if idx exists        
-        if idx in self.cache_feats and len(self.cache_feats[idx]):
+
+        # check cache_feats if idx exists
+        if self.enable_cache and idx in self.cache_feats and len(self.cache_feats[idx]):
             sample_feats = self.cache_feats[idx].pop(-1)
         else:
             gene_ds = self.meta_df.iloc[idx]
@@ -188,10 +190,10 @@ class SpliceDataset(Dataset):
             print(f"Warning: Sample features for index {idx} are None, skipping.")
             return None
         
-        if self.training and self.iweight and self.dynamic_weights:
+        if self.stage and self.iweight and self.dynamic_weights:
             self.meta_df.iloc[idx, self.iweight] = sample_feats['target_feats']['quality'].item()
 
-        if self.training:
+        if self.stage:
             pass
             # if sample_feats['target_feats']['quality'] < min_quality:
             #     return None
