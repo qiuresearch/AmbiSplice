@@ -8,6 +8,4 @@ https://download.pytorch.org/whl/cu126
 
 pip install lightning
 
-pip install hydra-core --upgrade
-
 conda install -c conda-forge pandas hydra-core omegaconf wandb gputil matplotlib beartype colorlog -y

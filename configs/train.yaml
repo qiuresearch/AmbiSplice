@@ -7,27 +7,30 @@ project: AmbiSplice
 model:
   debug: ${debug}
   dropout: 0.1
-  loss: se3_vf_loss
+  loss: cls+psi
   loss_scale_cls: 0.5
   loss_scale_psi: 0.5
 dataloader:
   debug: ${debug}
-  batch_size: 64
-  train_batch_size: 64
+  train_batch_size: 96
   val_batch_size: 128
   test_batch_size: 128
-  predict_batch_size: 512
+  predict_batch_size: 256
+  train_shuffle: true
+  val_shuffle: true
+  test_shuffle: true
+  predict_shuffle: false
   num_workers: 4
   prefetch_factor: 2
 dataset:
   debug: ${debug}
-  train_size: 32000
-  val_size: 6400
-  test_size: 6400
-  predict_size: 6400
+  train_size: 96000
+  val_size: 12800
+  test_size: 12800
+  predict_size: null
   stratified_sampling: chrom
+  weighted_sampling: len
   dynamic_weights: false
-  weighted_sampling: null
   enable_cache: false
 litrun:
   debug: ${debug}
@@ -63,7 +66,7 @@ litrun:
   early_stopping:
     monitor: train/loss # val/loss
     mode: min
-    patience: 23
+    patience: 36
     strict: true
     verbose: true
   lr_monitor:

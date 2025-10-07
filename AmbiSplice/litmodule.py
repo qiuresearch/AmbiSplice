@@ -110,7 +110,7 @@ class NanGradientCallback(Callback):
             
 class OmniDataModule(LightningDataModule):
     def __init__(self, train_dataset, val_dataset=None, test_dataset=None, predict_dataset=None,
-                 batch_size=4, num_workers=4, sampler=None, collater=None,
+                 batch_size=16, num_workers=4, sampler=None, collater=None,
                  **kwargs):
         super().__init__()
         
@@ -126,36 +126,36 @@ class OmniDataModule(LightningDataModule):
         self.sampler = sampler # not used yet
         self.collater = collater # not used yet
 
-        self._extra_cfg = kwargs
+        self.cfg = kwargs
 
 
     def train_dataloader(self):
         return DataLoader(self.train_dataset, 
-                          batch_size=self._extra_cfg.get('train_batch_size', self.batch_size),
-                          num_workers=self._extra_cfg.get('train_num_workers', self.num_workers),
-                          shuffle=self._extra_cfg.get('train_shuffle', True),
-                          pin_memory=self._extra_cfg.get('train_pin_memory', True),
+                          batch_size=self.cfg.get('train_batch_size', self.batch_size),
+                          num_workers=self.cfg.get('train_num_workers', self.num_workers),
+                          shuffle=self.cfg.get('train_shuffle', True),
+                          pin_memory=self.cfg.get('train_pin_memory', True),
                           )
     def val_dataloader(self):
         return DataLoader(self.val_dataset, 
-                          batch_size=self._extra_cfg.get('val_batch_size', self.batch_size),
-                          num_workers=self._extra_cfg.get('val_num_workers', self.num_workers),
-                          shuffle=self._extra_cfg.get('val_shuffle', False),
-                          pin_memory=self._extra_cfg.get('val_pin_memory', True),
+                          batch_size=self.cfg.get('val_batch_size', self.batch_size),
+                          num_workers=self.cfg.get('val_num_workers', self.num_workers),
+                          shuffle=self.cfg.get('val_shuffle', False),
+                          pin_memory=self.cfg.get('val_pin_memory', True),
                           )
     def test_dataloader(self):
         return DataLoader(self.test_dataset, 
-                          batch_size=self._extra_cfg.get('test_batch_size', self.batch_size),
-                          num_workers=self._extra_cfg.get('test_num_workers', self.num_workers),
-                          shuffle=self._extra_cfg.get('test_shuffle', False),
-                          pin_memory=self._extra_cfg.get('test_pin_memory', False),
+                          batch_size=self.cfg.get('test_batch_size', self.batch_size),
+                          num_workers=self.cfg.get('test_num_workers', self.num_workers),
+                          shuffle=self.cfg.get('test_shuffle', False),
+                          pin_memory=self.cfg.get('test_pin_memory', False),
                           )
     def predict_dataloader(self):
         return DataLoader(self.predict_dataset, 
-                          batch_size=self._extra_cfg.get('predict_batch_size', self.batch_size),
-                          num_workers=self._extra_cfg.get('predict_num_workers', self.num_workers),
-                          shuffle=self._extra_cfg.get('predict_shuffle', False),
-                          pin_memory=self._extra_cfg.get('predict_pin_memory', False),
+                          batch_size=self.cfg.get('predict_batch_size', self.batch_size),
+                          num_workers=self.cfg.get('predict_num_workers', self.num_workers),
+                          shuffle=self.cfg.get('predict_shuffle', False),
+                          pin_memory=self.cfg.get('predict_pin_memory', False),
                           )
     
     def teardown(self, stage: Optional[str] = None):
@@ -408,7 +408,6 @@ class OmniRunModule(LightningModule):
     def on_validation_epoch_start(self):
         return super().on_validation_epoch_start()
 
-    @torch.no_grad()
     def validation_step(self, batch_feats, batch_idx=None):
         
         preds = self.model(batch_feats)
@@ -445,7 +444,6 @@ class OmniRunModule(LightningModule):
 
         return super().on_validation_epoch_end()
 
-    @torch.no_grad()
     def predict_step(self, batch_feats, batch_idx=None):
         if self._predict_steps == 0:
             summarize_tensors(batch_feats, prefix='Predict Step Input')

@@ -173,9 +173,7 @@ class PangolinSingle(nn.Module):
 
         return metric_items
 
-    @torch.no_grad()
     def predict(self, batch_feats):
-        # self.eval()
         preds = self.forward(batch_feats)
         preds['cls'] = F.softmax(preds['cls'], dim=1)
         preds['psi'] = torch.sigmoid(preds['psi'])
