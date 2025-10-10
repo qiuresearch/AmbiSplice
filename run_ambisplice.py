@@ -7,6 +7,7 @@ import pandas as pd
 import GPUtil
 import hydra
 import omegaconf
+import yaml
 
 import torch
 import torch.nn as nn
@@ -18,6 +19,7 @@ from AmbiSplice import utils
 from AmbiSplice import model
 from AmbiSplice import dataset
 from AmbiSplice import litmodule
+from AmbiSplice import loss_metrics
 
 ilogger = utils.get_pylogger(__name__)
 
@@ -28,7 +30,7 @@ def get_accelerator_devices(gpus=[0]):
         gpus = [] if gpus is None else [gpus]
 
     if gpus and torch.cuda.is_available():
-        accelerator = torch.device("cuda")
+        accelerator = str(torch.device("cuda"))
         devices = GPUtil.getAvailable(order='memory', limit=1000)
         devices = [gpu for gpu in gpus if gpu in devices]
         if not devices:
@@ -36,7 +38,7 @@ def get_accelerator_devices(gpus=[0]):
         # torch.backends.cudnn.benchmark = True
     else:
         print("GPUs not requested or CUDA is not available, using CPU!")
-        accelerator = torch.device("cpu")
+        accelerator = str(torch.device("cpu"))
         devices = "auto"
 
     torch.set_float32_matmul_precision('medium')
@@ -59,56 +61,108 @@ def get_torch_model(model_cfg: omegaconf.DictConfig):
     return torch_model
 
 
-def get_lit_data(dataset_cfg: omegaconf.DictConfig,
-                 dataloader_cfg: omegaconf.DictConfig = None):
+def get_datasets(dataset_cfg: omegaconf.DictConfig):
     """ Prepare training, validation, and prediction datasets."""
-    meta_df_path = os.path.join(os.getcwd(), 'rna_sites.pkl')
-    meta_df = pd.read_pickle(meta_df_path)
 
-    test_chroms = ['chr1', 'chr3', 'chr5', 'chr7', 'chr9']
-    train_chroms = ['chr2', 'chr4', 'chr6', 'chr8', 'chr10',
-                    'chr11', 'chr12', 'chr13', 'chr14', 'chr15', 'chr16', 'chr17',
-                    'chr18', 'chr19', 'chr20', 'chr21', 'chr22', 'chrX', 'chrY']
+    if dataset_cfg.type in ('AmbiSplice', 'ambisplice'):
+        meta_df_path = dataset_cfg.file_path
+        meta_df = pd.read_pickle(meta_df_path)
 
-    isin_test = meta_df['chrom'].isin(test_chroms)
-    test_df = meta_df[isin_test].reset_index(drop=True)
-    train_val = meta_df[~ isin_test].reset_index(drop=True)
+        test_chroms = ['chr1', 'chr3', 'chr5', 'chr7', 'chr9']
+        train_chroms = ['chr2', 'chr4', 'chr6', 'chr8', 'chr10',
+                        'chr11', 'chr12', 'chr13', 'chr14', 'chr15', 'chr16', 'chr17',
+                        'chr18', 'chr19', 'chr20', 'chr21', 'chr22', 'chrX', 'chrY']
 
-    # A poor man's method to split train and val using chrom column for stratification
-    chrom_groups = train_val.groupby('chrom')
-    train_list = []
-    val_list = []
-    for chrom, group in chrom_groups:
-        group = group.sort_values(by='len').reset_index(drop=True)
-        val_list.append(group.iloc[::6])
-        train_list.append(group.drop(group.index[::6]))
-        # group = group.sample(frac=1, random_state=42)  # shuffle the group
-        # n_val = max(1, int(len(group) * 0.15))  # at least one sample for validation
-        # val_list.append(group.iloc[:n_val])
-        # train_list.append(group.iloc[n_val:])
+        isin_test = meta_df['chrom'].isin(test_chroms)
+        test_df = meta_df[isin_test].reset_index(drop=True)
+        train_val = meta_df[~ isin_test].reset_index(drop=True)
 
-    train_df = pd.concat(train_list).reset_index(drop=True)
-    val_df = pd.concat(val_list).reset_index(drop=True)
+        # A poor man's method to split train and val using chrom column for stratification
+        chrom_groups = train_val.groupby('chrom')
+        train_list = []
+        val_list = []
+        for chrom, group in chrom_groups:
+            group = group.sort_values(by='len').reset_index(drop=True)
+            val_list.append(group.iloc[::6])
+            train_list.append(group.drop(group.index[::6]))
+            # group = group.sample(frac=1, random_state=42)  # shuffle the group
+            # n_val = max(1, int(len(group) * 0.15))  # at least one sample for validation
+            # val_list.append(group.iloc[:n_val])
+            # train_list.append(group.iloc[n_val:])
 
-    # show the sizes of the datasets
-    print(f"Train set size: {len(train_df)}")
-    print(f"Validation set size: {len(val_df)}")
-    print(f"Test set size: {len(test_df)}")    
+        train_df = pd.concat(train_list).reset_index(drop=True)
+        val_df = pd.concat(val_list).reset_index(drop=True)
 
-    train_dataset = dataset.SpliceDataset(train_df, epoch_size=dataset_cfg.train_size, summarize=True, **dataset_cfg)
-    val_dataset = dataset.SpliceDataset(val_df, epoch_size=dataset_cfg.val_size, summarize=False, **dataset_cfg)
-    predict_dataset = dataset.SpliceDataset(test_df, epoch_size=dataset_cfg.predict_size, summarize=False, **dataset_cfg)
+        # show the sizes of the datasets
+        print(f"Train set size: {len(train_df)}")
+        print(f"Validation set size: {len(val_df)}")
+        print(f"Test set size: {len(test_df)}")    
 
-    lit_data = litmodule.OmniDataModule(train_dataset=train_dataset,
-                                        val_dataset=val_dataset,
-                                        predict_dataset=predict_dataset,
+        datasets = {
+            'train': dataset.SpliceDataset(train_df, epoch_size=dataset_cfg.train_size, summarize=True, **dataset_cfg),
+            'val': dataset.SpliceDataset(val_df, epoch_size=dataset_cfg.val_size, summarize=False, **dataset_cfg),
+            'test': dataset.SpliceDataset(test_df, epoch_size=dataset_cfg.test_size, summarize=False, **dataset_cfg),
+            'predict': dataset.SpliceDataset(test_df, epoch_size=dataset_cfg.predict_size, summarize=False, **dataset_cfg)
+        }
+    elif dataset_cfg.type in ('Pangolin', 'pangolin'):
+        hd5file = dataset_cfg.file_path
+
+        datasets = {
+            'train': dataset.PangolinDataset(split='train', epoch_size=dataset_cfg.train_size, summarize=True, **dataset_cfg),
+            'val': dataset.PangolinDataset(split='val', epoch_size=dataset_cfg.val_size, summarize=False, **dataset_cfg),
+            'test': dataset.PangolinDataset(split='test', epoch_size=dataset_cfg.test_size, summarize=False, **dataset_cfg),
+            'predict': dataset.PangolinDataset(split='test', epoch_size=dataset_cfg.predict_size, summarize=False, **dataset_cfg)
+        }
+    else:
+        raise ValueError(f"Unknown dataset type: {dataset_cfg.type}")
+
+    return datasets
+
+
+def get_lit_data(datasets, dataloader_cfg: omegaconf.DictConfig):
+    lit_data = litmodule.OmniDataModule(train_dataset=datasets['train'],
+                                        val_dataset=datasets['val'],
+                                        test_dataset=datasets['test'],
+                                        predict_dataset=datasets['predict'],
                                         **dataloader_cfg)
     return lit_data
-
 
 def get_lit_run(cfg: omegaconf.DictConfig, model: nn.Module):
     lit_run = litmodule.OmniRunModule(model=model, cfg=cfg)
     return lit_run
+
+
+def concat_predict_outputs(epoch_outputs):
+    """ Concatenate list of batch outputs to single batched outputs."""
+    # initialize a new dictionary to hold all outputs
+    input_feats, preds = {}, {}
+    for batch_feats, batch_preds in epoch_outputs:
+        for key, value in batch_feats.items():
+            if key not in input_feats:
+                input_feats[key] = []
+            input_feats[key].append(value)
+        for key, value in batch_preds.items():
+            if key not in preds:
+                preds[key] = []
+            preds[key].append(value)
+
+    # concatenate lists into single tensors if they are tensors or numpy arrays
+    def concat_dict_of_lists(dict_of_lists):
+        for key in dict_of_lists:
+            if isinstance(dict_of_lists[key][0], torch.Tensor):
+                dict_of_lists[key] = torch.cat(dict_of_lists[key], dim=0)
+            elif isinstance(dict_of_lists[key][0], np.ndarray):
+                dict_of_lists[key] = np.concatenate(dict_of_lists[key], axis=0)
+            elif isinstance(dict_of_lists[key][0], (list, tuple)):
+                dict_of_lists[key] = sum(dict_of_lists[key], start=[])
+            else:
+                continue
+        return dict_of_lists
+
+    input_feats = concat_dict_of_lists(input_feats)
+    preds = concat_dict_of_lists(preds)
+
+    return input_feats, preds
 
 
 @hydra.main(version_base=None, config_path="./configs", config_name="train.yaml")
@@ -141,15 +195,45 @@ def main(main_cfg: omegaconf.DictConfig):
     omegaconf.OmegaConf.set_struct(main_cfg, False)  # allow new attribute assignment
     accelerator, devices = get_accelerator_devices(gpus=main_cfg.gpus)
 
-    ambisplice_model = get_torch_model(main_cfg.model)
-    lit_run = get_lit_run(main_cfg.litrun, ambisplice_model)
+    torch_model = get_torch_model(main_cfg.model)
+    lit_run = get_lit_run(main_cfg.litrun, torch_model)
 
-    lit_data = get_lit_data(main_cfg.dataset, main_cfg.dataloader)
+    datasets = get_datasets(main_cfg.dataset)
+    lit_data = get_lit_data(datasets, main_cfg.dataloader)
 
-    trainer = lit_run.fit(lit_data, save_cfg=main_cfg, devices=devices, debug=main_cfg.debug)
+    if main_cfg.stage in ('train', 'training'):
+        ilogger.info(f"Training model with config:\n{omegaconf.OmegaConf.to_yaml(main_cfg)}")
+            # strategy="ddp_find_unused_parameters_false" if len(devices) > 1 else None,
+            # strategy="ddp" if len(devices) > 1 else None,
+            # accumulate_grad_batches=main_cfg.trainer.accumulate_grad_batches,
+        trainer = lit_run.fit(lit_data, save_cfg=main_cfg, devices=devices, debug=main_cfg.debug)
+        ilogger.info("Training completed.")
+        return trainer
+    elif main_cfg.stage in ('test', 'testing', 'eval', 'evaluate'):
 
-    return trainer
+        test_outputs = lit_run.evaluate(lit_data, save_prefix=main_cfg.save_prefix, accelerator=accelerator, devices=devices, debug=main_cfg.debug)
 
+        input_feats, preds = concat_predict_outputs(test_outputs)
+
+        benchmark_metrics = loss_metrics.calc_benchmark(preds, input_feats, keep_batchdim=False)
+
+        # save the benchmark metrics
+        if main_cfg.save_prefix is not None:
+            metrics_path = f"{main_cfg.save_prefix}_epoch_metrics.yaml"
+            ilogger.info(f"Saving test epoch metrics to {metrics_path} ...")
+            with open(metrics_path, 'w') as f:
+                yaml.dump(benchmark_metrics, f, default_flow_style=None, sort_keys=False)
+            ilogger.info(f"Test benchmark metrics saved to {metrics_path}")
+
+        ilogger.info("Testing completed.")
+        return test_outputs
+    elif main_cfg.stage in ('predict', 'inference'):
+        pred_outputs = lit_run.predict(datamodule=lit_data, save_prefix=main_cfg.save_prefix, accelerator=accelerator, devices=devices, debug=main_cfg.debug)
+        ilogger.info("Prediction completed.")
+        return pred_outputs
+    else:
+        raise ValueError(f"Unknown stage: {main_cfg.stage}")
+        
 
 if __name__ == "__main__":
     main()

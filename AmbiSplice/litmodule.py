@@ -1,6 +1,7 @@
 import os
 import time
 import datetime
+import pickle
 from beartype.typing import Any, Dict, Optional
 from omegaconf import DictConfig, OmegaConf
 import socket
@@ -77,6 +78,7 @@ def summarize_epoch_metrics(epoch_metrics, prefix='', logger=None, logger_prefix
                     sync_dist=True,
                     rank_zero_only=False,
             )
+    return avg_metrics
 
 
 def has_wandb_connectivity(host="api.wandb.ai", port=443, timeout=2.0):
@@ -184,16 +186,21 @@ class OmniRunModule(LightningModule):
         self.train_epoch_metrics = []
         self.train_epoch_samples = []
         self.validation_epoch_metrics = []
-        self.validation_epoch_samples = []        
-        
+        self.validation_epoch_samples = []
+        self.test_epoch_metrics = []
+        self.test_epoch_samples = []
+        self.predict_epoch_metrics = []
+        self.predict_epoch_samples = []
+
         self._train_start_time = time.time()
         self._epoch_start_time = time.time()        
 
         self._train_steps = 0
         self._validation_steps = 0
+        self._test_steps = 0
         self._predict_steps = 0
 
-        self.last_lr_step = -1
+        self.last_lr_step = -1 # not yet used
         self.save_hyperparameters(ignore=['model'])
 
     def _log_scalar(
@@ -225,7 +232,7 @@ class OmniRunModule(LightningModule):
 
 
     def resume_from_ckpt(self, ckpt_path=None):
-
+        """ not yet used """
         cfg = self.cfg
         if cfg.resume_from_ckpt and not cfg.resume_model_weights_only: # actual parameter loading is done by the trainer
             if(os.path.isdir(cfg.resume_from_ckpt)):
@@ -444,17 +451,83 @@ class OmniRunModule(LightningModule):
 
         return super().on_validation_epoch_end()
 
+    def test_step(self, batch_feats, batch_idx=None):
+        if self._test_steps == 0:
+            summarize_tensors(batch_feats, prefix='Test Step Input')
+            
+        preds = self.model(batch_feats)
+        if self._test_steps == 0:
+            summarize_tensors(preds, prefix='Test Step Output')
+
+        loss, loss_items = self.model.calc_loss(preds, batch_feats)
+        loss_items.update(self.model.calc_metric(preds, batch_feats))
+        if self._test_steps == 0:
+            summarize_tensors(loss_items, prefix='Test Loss Items')
+
+        self.log("test/loss", loss, prog_bar=True)
+        self.test_epoch_metrics.append(loss_items)
+
+        pred_labels = self.model.preds_to_labels(preds)
+        self._test_steps += 1
+        # Return is NOT collected by trainer.test()! So not useful at all!
+        return (batch_feats, pred_labels)
+
+    def on_test_epoch_end(self):
+        epoch_time = (time.time() - self._epoch_start_time) / 60.0
+        self.log(
+            'test/epoch_time_minutes',
+            epoch_time,
+            on_step=False,
+            on_epoch=True,
+            prog_bar=False,
+            sync_dist=True,
+            rank_zero_only=False,
+        )
+        self._epoch_start_time = time.time()
+
+        if len(self.test_epoch_metrics) > 0 and not self.is_child_process:
+            summarize_epoch_metrics(
+                self.test_epoch_metrics,
+                prefix='Test',
+                logger=self._log_scalar,
+                logger_prefix='test/epoch_'
+            )
+            self.test_epoch_metrics.clear()
+
+        return super().on_test_epoch_end()
+
+    def on_predict_epoch_start(self):
+        if not self.is_child_process:
+            self.predict_epoch_metrics.clear()
+        return super().on_predict_epoch_start()
+    
     def predict_step(self, batch_feats, batch_idx=None):
         if self._predict_steps == 0:
             summarize_tensors(batch_feats, prefix='Predict Step Input')
 
-        preds = self.model.predict(batch_feats)
+        preds = self.model(batch_feats)
+        pred_labels = self.model.preds_to_labels(preds)
         if self._predict_steps == 0:
-            summarize_tensors(preds, prefix='Predict Step Output')    
+            summarize_tensors(pred_labels, prefix='Predict Step Output')
+
+        loss, loss_items = self.model.calc_loss(preds, batch_feats)
+        loss_items.update(self.model.calc_metric(preds, batch_feats))
+        if loss_items:
+            self.predict_epoch_metrics.append(loss_items)
+            if self._predict_steps == 0:
+                summarize_tensors(loss_items, prefix='Predict Loss Items')
 
         self._predict_steps += 1
-        return (batch_feats, preds)
+        return (batch_feats, pred_labels)
 
+    def on_predict_epoch_end(self):
+        if len(self.predict_epoch_metrics) > 0 and not self.is_child_process:
+            summarize_epoch_metrics(
+                self.predict_epoch_metrics,
+                prefix='Predict',
+                logger=None,
+            )
+        return super().on_predict_epoch_end()
 
     def fit(self, datamodule, cfg=None, accelerator="cuda", devices="auto", save_cfg=None, debug=False, **kwargs):
         """ Fit the model using PyTorch Lightning Trainer.
@@ -540,7 +613,6 @@ class OmniRunModule(LightningModule):
             cfg.trainer.deterministic = False
             # cfg.run.trainer.fast_dev_run = True
         except NameError:
-                        
             pass
 
         trainer = Trainer(
@@ -556,7 +628,83 @@ class OmniRunModule(LightningModule):
         trainer.fit(
             model=self,
             datamodule=datamodule,
-            ckpt_path=cfg.get('warm_start', None),
+            ckpt_path=cfg.get('resume_from_ckpt', None),
         )
 
         return trainer
+    
+    def evaluate(self, datamodule, save_prefix=None, accelerator="cuda", devices="auto", debug=False, **kwargs):
+        """ Test the model using PyTorch Lightning Trainer.
+        Args:
+            datamodule: LightningDataModule
+            devices: list of int, GPU device ids to use, if None, use all available
+            debug: bool, whether to enable debug mode
+            **kwargs: additional keyword arguments
+        Returns:
+            predictions: list of (batch_feats, preds) tuples from test_step
+        """
+
+        trainer = Trainer(enable_progress_bar=True,
+                          enable_model_summary=True,
+                          accelerator=accelerator,
+                          devices=devices)
+        
+        eval_outputs = trainer.predict(
+            self,
+            datamodule=datamodule,
+            ckpt_path=self.cfg.get('resume_from_ckpt', None),
+        )
+
+        # calculate benchmarks
+        # benchmarks = calc_benchmark(eval_outputs, datamodule)
+
+        if save_prefix is not None and not self.is_child_process:
+            save_path = f"{save_prefix}_eval_outputs.pkl"
+            ilogger.info(f"Saving eval outputs to {save_path} ...")
+            with open(save_path, 'wb') as f:
+                pickle.dump(eval_outputs, f)
+            ilogger.info(f"Eval outputs saved to {save_path}")
+
+            if self.predict_epoch_metrics and len(self.predict_epoch_metrics) > 0:
+                metrics_path = f"{save_prefix}_batch_metrics.csv"
+                ilogger.info(f"Saving eval batch metrics to {metrics_path} ...")
+                with open(metrics_path, 'w') as f:
+                    keys = list(self.predict_epoch_metrics[0].keys())
+                    f.write(','.join(keys) + '\n')
+                    for batch_metrics in self.predict_epoch_metrics[1:]:
+                        f.write(','.join(str(batch_metrics[k].item()) for k in keys) + '\n')
+
+                ilogger.info(f"Eval batch metrics saved to {metrics_path}")
+
+        return eval_outputs
+
+    def predict(self, datamodule, save_prefix=None, accelerator="cuda", devices="auto", debug=False, **kwargs):
+        """ Inference using PyTorch Lightning Trainer.
+        Args:
+            datamodule: LightningDataModule
+            devices: list of int, GPU device ids to use, if None, use all available
+            debug: bool, whether to enable debug mode
+            **kwargs: additional keyword arguments
+        Returns:
+            predictions: list of (batch_feats, preds) tuples from predict_step
+        """
+
+        trainer = Trainer(enable_progress_bar=True,
+                          enable_model_summary=True,
+                          accelerator=accelerator,
+                          devices=devices)
+        
+        pred_outputs = trainer.predict(
+            self,
+            datamodule=datamodule,
+            ckpt_path=self.cfg.get('resume_from_ckpt', None),
+        )
+
+        if save_prefix is not None and not self.is_child_process:
+            save_path = f"{save_prefix}_pred_outputs.pkl"
+            ilogger.info(f"Saving predict outputs to {save_path} ...")
+            with open(save_path, 'wb') as f:
+                pickle.dump(pred_outputs, f)
+            ilogger.info(f"Predict outputs saved to {save_path}")
+
+        return pred_outputs

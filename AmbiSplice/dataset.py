@@ -1,4 +1,5 @@
 import os
+import h5py
 import torch
 from torch.utils.data import Dataset
 import numpy as np
@@ -223,3 +224,39 @@ class SpliceDataset(Dataset):
             #     return None
                 
         return sample_feats
+    
+
+class PangolinDataset(Dataset):
+    def __init__(self, file_path):
+        super(PangolinDataset, self).__init__()
+        self.fp = file_path
+        self.data = h5py.File(file_path, 'r', libver='latest')
+        self.ctr = 0
+
+    def __getitem__(self, idx):
+        self.ctr += 1
+        if self.ctr % 100000 == 0: # workaround to avoid memory issues
+            self.data.close()
+            self.data = h5py.File(self.fp, 'r', libver='latest')
+        X = self.data['X' + str(idx)][:].T # transpose to (4, L)
+        Y = self.data['Y' + str(idx)][:].T # transpose to (12, L)
+        Z = self.data['Z' + str(idx)][:] # (4,): [chrom, start, end, strand]
+
+        # tissue order: heart, liver, brain, testis
+        # each tissue: unspliced, spliced, usage
+        batch_feats = {
+            'seq': splice_feats.decode_onehot(X, dim=0, idx2base=np.array(['A', 'C', 'G', 'T', 'N'])),
+            'seq_onehot': X,
+            'cls': np.argmax(Y[0:2, :], axis=0), # 0: unspliced, 1: spliced
+            'psi': Y[2, :], # usage
+            'chrom': Z[0].decode(),
+            'start': int(Z[1]),
+            'end': int(Z[2]),
+            'strand': Z[3].decode(),
+        }
+
+        return batch_feats
+
+    def __len__(self):
+        assert len(self.data) % 3 == 0
+        return len(self.data) // 3    

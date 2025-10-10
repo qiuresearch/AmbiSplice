@@ -8,7 +8,7 @@ BASE_DICT = {'A': [1, 0, 0, 0],
              'T': [0, 0, 0, 1],
              'N': [0, 0, 0, 0]}
 
-def one_hot_encode_CL(seq): # CL --> return in shape [C, L]
+def onehot_encode_CL(seq): # CL --> return in shape [C, L]
     return np.array([BASE_DICT.get(base.upper(), [0, 0, 0, 0]) for base in seq]).T
 
 def decode_one_hot_old(array):
@@ -21,17 +21,16 @@ def decode_one_hot_old(array):
     return ''.join(index_to_base.get(tuple(vec), 'N') for vec in array.T)
 
 
-def decode_one_hot(tensor):
-    index_to_base = {
-        (1, 0, 0, 0): 'A',
-        (0, 1, 0, 0): 'C',
-        (0, 0, 1, 0): 'G',
-        (0, 0, 0, 1): 'T',
-        (0, 0, 0, 0): 'N'  # unknown or padding
-    }
-    
-    # Transpose to iterate over columns (each column is one base)
-    return ''.join(index_to_base.get(tuple(tensor[:, i].int().tolist()), 'N') for i in range(tensor.shape[1]))
+def decode_onehot(onehot_vec, dim=0, idx2base=np.array(['A', 'C', 'G', 'T', 'N'])):
+    """ Decode one-hot encoded vector to string sequence.
+    Args:
+        onehot_vec: np.ndarray, one-hot encoded array
+        dim: int, dimension representing bases
+        idx2base: np.ndarray, mapping from index to base, with the last representing all zeros
+    """
+    onehot_idx = np.argmax(onehot_vec, axis=dim)
+    onehot_idx[np.sum(onehot_vec, axis=dim) == 0] = len(idx2base) - 1  # set 'N' for all-zero columns
+    return ''.join(idx2base[onehot_idx])
 
 
 def sprinkle_sites_onto_vectors(rna_sites, debug=False):
@@ -131,7 +130,7 @@ def get_train_feats_single_rna(rna_feats, num_crops=None,
         
         # pad with 'N's if needed for input X
         train_feat['seq'] = 'N' * left_pad + rna_seq[seq_start:seq_end] + 'N' * right_pad
-        train_feat['seq_onehot'] = one_hot_encode_CL(train_feat['seq']).astype(np.float32)  # shape [4, total_size]
+        train_feat['seq_onehot'] = onehot_encode_CL(train_feat['seq']).astype(np.float32)  # shape [4, total_size]
 
         train_feat['cls'] = np.pad(rna_cls[seq_start:seq_end], (left_pad, right_pad), 'constant')
         train_feat['cls_odds'] = np.pad(rna_cls_odds[seq_start:seq_end], (left_pad, right_pad), 'constant')
