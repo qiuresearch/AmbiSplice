@@ -11,15 +11,11 @@ import yaml
 
 import torch
 import torch.nn as nn
-from pytorch_lightning import Trainer
 
-from AmbiSplice import data_utils
-from AmbiSplice import visual_utils
 from AmbiSplice import utils
 from AmbiSplice import model
 from AmbiSplice import dataset
 from AmbiSplice import litmodule
-from AmbiSplice import loss_metrics
 
 ilogger = utils.get_pylogger(__name__)
 
@@ -132,39 +128,6 @@ def get_lit_run(cfg: omegaconf.DictConfig, model: nn.Module):
     return lit_run
 
 
-def concat_predict_outputs(epoch_outputs):
-    """ Concatenate list of batch outputs to single batched outputs."""
-    # initialize a new dictionary to hold all outputs
-    input_feats, preds = {}, {}
-    for batch_feats, batch_preds in epoch_outputs:
-        for key, value in batch_feats.items():
-            if key not in input_feats:
-                input_feats[key] = []
-            input_feats[key].append(value)
-        for key, value in batch_preds.items():
-            if key not in preds:
-                preds[key] = []
-            preds[key].append(value)
-
-    # concatenate lists into single tensors if they are tensors or numpy arrays
-    def concat_dict_of_lists(dict_of_lists):
-        for key in dict_of_lists:
-            if isinstance(dict_of_lists[key][0], torch.Tensor):
-                dict_of_lists[key] = torch.cat(dict_of_lists[key], dim=0)
-            elif isinstance(dict_of_lists[key][0], np.ndarray):
-                dict_of_lists[key] = np.concatenate(dict_of_lists[key], axis=0)
-            elif isinstance(dict_of_lists[key][0], (list, tuple)):
-                dict_of_lists[key] = sum(dict_of_lists[key], start=[])
-            else:
-                continue
-        return dict_of_lists
-
-    input_feats = concat_dict_of_lists(input_feats)
-    preds = concat_dict_of_lists(preds)
-
-    return input_feats, preds
-
-
 @hydra.main(version_base=None, config_path="./configs", config_name="train.yaml")
 def main(main_cfg: omegaconf.DictConfig):
     # From Pangolin: 
@@ -201,7 +164,7 @@ def main(main_cfg: omegaconf.DictConfig):
     datasets = get_datasets(main_cfg.dataset)
     lit_data = get_lit_data(datasets, main_cfg.dataloader)
 
-    if main_cfg.stage in ('train', 'training'):
+    if main_cfg.stage in ('train', 'training', 'fit'):
         ilogger.info(f"Training model with config:\n{omegaconf.OmegaConf.to_yaml(main_cfg)}")
             # strategy="ddp_find_unused_parameters_false" if len(devices) > 1 else None,
             # strategy="ddp" if len(devices) > 1 else None,
@@ -213,21 +176,9 @@ def main(main_cfg: omegaconf.DictConfig):
 
         test_outputs = lit_run.evaluate(lit_data, save_prefix=main_cfg.save_prefix, accelerator=accelerator, devices=devices, debug=main_cfg.debug)
 
-        input_feats, preds = concat_predict_outputs(test_outputs)
-
-        benchmark_metrics = loss_metrics.calc_benchmark(preds, input_feats, keep_batchdim=False)
-
-        # save the benchmark metrics
-        if main_cfg.save_prefix is not None:
-            metrics_path = f"{main_cfg.save_prefix}_epoch_metrics.yaml"
-            ilogger.info(f"Saving test epoch metrics to {metrics_path} ...")
-            with open(metrics_path, 'w') as f:
-                yaml.dump(benchmark_metrics, f, default_flow_style=None, sort_keys=False)
-            ilogger.info(f"Test benchmark metrics saved to {metrics_path}")
-
         ilogger.info("Testing completed.")
         return test_outputs
-    elif main_cfg.stage in ('predict', 'inference'):
+    elif main_cfg.stage in ('predict', 'inference', 'pred'):
         pred_outputs = lit_run.predict(datamodule=lit_data, save_prefix=main_cfg.save_prefix, accelerator=accelerator, devices=devices, debug=main_cfg.debug)
         ilogger.info("Prediction completed.")
         return pred_outputs

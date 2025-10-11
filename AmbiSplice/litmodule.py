@@ -19,6 +19,9 @@ from pytorch_lightning.callbacks import RichProgressBar
 from pytorch_lightning.callbacks import TQDMProgressBar
 
 from . import utils
+from . import tensor_utils
+from . import loss_metrics
+
 ilogger = utils.get_pylogger(__name__)
 
 def summarize_tensors(vars_dict, prefix=''):
@@ -655,26 +658,53 @@ class OmniRunModule(LightningModule):
             ckpt_path=self.cfg.get('resume_from_ckpt', None),
         )
 
-        # calculate benchmarks
-        # benchmarks = calc_benchmark(eval_outputs, datamodule)
-
         if save_prefix is not None and not self.is_child_process:
             save_path = f"{save_prefix}_eval_outputs.pkl"
-            ilogger.info(f"Saving eval outputs to {save_path} ...")
+            ilogger.info(f"Saving outputs to {save_path} ...")
             with open(save_path, 'wb') as f:
                 pickle.dump(eval_outputs, f)
-            ilogger.info(f"Eval outputs saved to {save_path}")
+            ilogger.info(f"Outputs saved to {save_path}")
 
             if self.predict_epoch_metrics and len(self.predict_epoch_metrics) > 0:
                 metrics_path = f"{save_prefix}_batch_metrics.csv"
-                ilogger.info(f"Saving eval batch metrics to {metrics_path} ...")
+                ilogger.info(f"Saving batch metrics to {metrics_path} ...")
                 with open(metrics_path, 'w') as f:
                     keys = list(self.predict_epoch_metrics[0].keys())
                     f.write(','.join(keys) + '\n')
                     for batch_metrics in self.predict_epoch_metrics[1:]:
                         f.write(','.join(str(batch_metrics[k].item()) for k in keys) + '\n')
 
-                ilogger.info(f"Eval batch metrics saved to {metrics_path}")
+                ilogger.info(f"Batch metrics saved to {metrics_path}")
+
+        # concat all batch outputs for metrics calculation
+        eval_feats, eval_preds = tensor_utils.concat_dicts_outputs(eval_outputs)
+
+        ilogger.info("Calculating summary metrics ...")
+        sum_metrics = loss_metrics.calc_benchmark(eval_preds, eval_feats, keep_batchdim=False)
+
+        if save_prefix is not None and not self.is_child_process:
+            metrics_path = f"{save_prefix}_sum_metrics.yaml"
+            ilogger.info(f"Saving test summary metrics to {metrics_path} ...")
+            tensor_utils.to_yaml(sum_metrics, yaml_path=metrics_path)
+            ilogger.info(f"Test summary metrics saved to {metrics_path}")
+        else:
+            print("Summary Metrics:")
+            print(sum_metrics)
+
+        if save_prefix is not None and not self.is_child_process:
+            ilogger.info("Calculating individual metrics ...")
+            ind_metrics = loss_metrics.calc_benchmark(eval_preds, eval_feats, keep_batchdim=True)
+            metrics_path = f"{save_prefix}_ind_metrics.csv"
+            ilogger.info(f"Saving test individual metrics to {metrics_path} ...")
+            keys = list(ind_metrics.keys())
+            csv_lines = [','.join(keys)]
+            for i in range(len(ind_metrics[keys[0]])):
+                csv_lines.append(','.join([str(ind_metrics[key][i]) for key in keys]))
+
+            with open(metrics_path, 'w') as f:
+                f.writelines('\n'.join(csv_lines))
+
+            ilogger.info(f"Test individual metrics saved to {metrics_path}")
 
         return eval_outputs
 
