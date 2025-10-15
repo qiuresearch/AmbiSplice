@@ -10,7 +10,7 @@ from . import utils
 
 ilogger = utils.get_pylogger(__name__)
 
-class SpliceDataset(Dataset):
+class GeneSpliceDataset(Dataset):
     def __init__(self, meta_df, epoch_size=None, summarize=False,
                  data_dir='./', enable_cache=False, cache_dir='/tmp',
                  weighted_sampling=False, dynamic_weights=True, min_quality=None,
@@ -18,7 +18,7 @@ class SpliceDataset(Dataset):
                  random_seed=42, stage=False, samples_per_seq=1,
                  **kwargs):
         """
-        PyTorch Dataset for RNA splice sites.
+        PyTorch Dataset for RNA splice sites at the gene level.
 
         Args:
             meta_df (pd.DataFrame or str): Metadata DataFrame or path to CSV/pickle file.
@@ -35,7 +35,7 @@ class SpliceDataset(Dataset):
             samples_per_seq (int): Number of samples to generate per sequence.
             **kwargs: Additional keyword arguments.
         """
-        super(SpliceDataset, self).__init__()
+        super(GeneSpliceDataset, self).__init__()
 
         self.is_child_process = utils.get_rank() # utils.is_child_process()
 
@@ -227,7 +227,7 @@ class SpliceDataset(Dataset):
     
 
 class PangolinDataset(Dataset):
-    def __init__(self, file_path):
+    def __init__(self, file_path, **kwargs):
         super(PangolinDataset, self).__init__()
         self.fp = file_path
         self.data = h5py.File(file_path, 'r', libver='latest')
@@ -259,4 +259,8 @@ class PangolinDataset(Dataset):
 
     def __len__(self):
         assert len(self.data) % 3 == 0
-        return len(self.data) // 3    
+        return len(self.data) // 3
+    
+    def __del__(self):
+        if hasattr(self, 'data'):
+            self.data.close()

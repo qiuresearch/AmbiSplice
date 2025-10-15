@@ -11,8 +11,10 @@ import torch
 from typing import Optional
 from pytorch_lightning.utilities.rank_zero import rank_zero_only
 
+
 def is_child_process():
     return torch.distributed.is_available() and torch.distributed.is_initialized() and torch.distributed.get_rank() > 0
+    
 
 def get_rank() -> Optional[int]:
     # SLURM_PROCID can be set even if SLURM is not managing the multiprocessing,

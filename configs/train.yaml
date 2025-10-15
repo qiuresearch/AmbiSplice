@@ -1,10 +1,24 @@
 # defaults:
 #   - _self_
-debug: false
 stage: train
+debug: false
 gpus: [0]
+accelerator: gpu
 project: AmbiSplice
 save_prefix: dummy
+save_individual: false # only used for prediction or evaluation/test
+ensemble: # only used for prediction or evaluation/test
+  enable: false
+  model:
+    type: [Pangolin, Pangolin, Pangolin]
+    state_dict_path:
+      - /home/xqiu/github/Pangolin/pangolin/models/final.1.0.3.v2
+      - /home/xqiu/github/Pangolin/pangolin/models/final.2.0.3.v2
+      - /home/xqiu/github/Pangolin/pangolin/models/final.3.0.3.v2
+  litrun:
+    seed: null
+    resume_from_ckpt:
+      - null
 model:
   debug: ${debug}
   type: PangolinSingle
@@ -27,11 +41,11 @@ dataloader:
   prefetch_factor: 2
 dataset:
   debug: ${debug}
-  type: AmbiSplice
+  type: GeneSplice
   file_path: rna_sites.pkl
   train_size: 96000
   val_size: 12800
-  test_size: 1280
+  test_size: 12800
   predict_size: null
   stratified_sampling: chrom
   weighted_sampling: len
@@ -40,7 +54,7 @@ dataset:
 litrun:
   debug: ${debug}
   seed: 123
-  resume_from_ckpt: "checkpoints/PangolinSingle_2025-10-01_22-00-46_enonuk23/epoch=016-step=008500.ckpt"
+  resume_from_ckpt: null
   resume_model_weights_only: true
   optimizer:
     learning_rate: 0.0007
@@ -52,9 +66,8 @@ litrun:
     last_lr_step: -1
   trainer:
     min_epochs: 2
-    max_epochs: 100
+    max_epochs: 111
     max_time: "5:20:13:14"  # D:HH:MM:SS
-    accelerator: gpu
     strategy: auto
     precision: 32
     overfit_batches: 0

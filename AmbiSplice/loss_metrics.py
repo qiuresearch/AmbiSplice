@@ -118,6 +118,62 @@ def topks_roc_prc_metrics(y_pred, y_true, ks=(0.5, 1, 2, 4), multiples_of_true=F
 
     return all_metrics
 
+def calc_loss(preds, labels):
+    """ 
+        labels are the ground truth in the batch_feats
+    """
+    # TODO::
+    # 1) Many sequences are shorter than crop_size, so we need to mask out the padded regions
+    # cls has shape (B, 4, crop_size)
+    # psi has shape (B, 1, crop_size)
+    # 2) cls_odds and psi_std are not used currently
+
+    loss_items = {}
+    if 'cls' not in labels or 'psi' not in labels:
+        return -1, loss_items
+    
+    # four classes: non, acceptor, donor, hybrid
+    if 'cls_logits' in preds:
+        loss_items['cls_loss'] = F.cross_entropy(
+            preds['cls_logits'],
+            labels['cls'],
+            ignore_index=-100)
+    elif 'cls' in preds:
+        loss_items['cls_loss'] = F.cross_entropy(
+            torch.log(preds['cls'] + 1e-8),  # add a small value to avoid log(0)
+            labels['cls'],
+            ignore_index=-100)
+    else:
+        raise ValueError("No cls or cls_logits in preds.")
+
+    # psi is a probability between 0 and 1
+    if 'psi_logits' in preds:
+        loss_items['psi_loss'] = F.binary_cross_entropy_with_logits(
+            preds['psi_logits'],
+            labels['psi'],
+            weight=labels['psi'] >= 0,  # mask out negative values
+            reduction='mean')
+    elif 'psi' in preds:
+        psi_label = labels['psi'].float()
+        weight = (psi_label >= 0).float()  # mask out negative values
+        psi_label[psi_label < 0] = 0  # set negative values to 0 for BCE loss (an error will be raised otherwise)
+
+        loss_items['psi_loss'] = F.binary_cross_entropy(
+            preds['psi'].float(),
+            psi_label,
+            weight=weight,
+            reduction='mean')
+    else:
+        raise ValueError("No psi or psi_logits in preds.")
+
+    loss = loss_items['cls_loss'] + loss_items['psi_loss']
+    loss_items['loss'] = loss
+
+    for k in loss_items: # do not move to cpu here, let the caller do it
+        loss_items[k] = loss_items[k].detach() 
+
+    return loss, loss_items
+
 
 def calc_metric(preds, labels, keep_batchdim=False, to_numpy=True, eps=1e-8):
     """ preds are the output of forward() without any activation
@@ -183,16 +239,18 @@ def calc_benchmark(preds, labels, keep_batchdim=True, eps=1e-8):
     """ preds are the output of forward() without any activation
         labels are the ground truth in the batch_feats
     """
-    benchmark_metrics = calc_metric(preds, labels, keep_batchdim=keep_batchdim, to_numpy=True, eps=eps)
+    loss, benchmark_metrics = calc_loss(preds, labels)
+    benchmark_metrics.update(calc_metric(preds, labels, keep_batchdim=keep_batchdim, to_numpy=True, eps=eps))
 
     if keep_batchdim:
         batch_size = labels['cls'].shape[0]
         for i in range(batch_size):
-            y_true = (labels['cls'][i].flatten() > 0.5).to(torch.float32)
             y_pred = (preds['cls'][i].argmax(dim=-2).flatten() > 0.5).to(torch.float32)
+            y_true = (labels['cls'][i].flatten() > 0.5).to(torch.float32)
             metric = topks_roc_prc_metrics(y_pred, y_true, ks=(0.5, 1, 2, 4), multiples_of_true=True)
             if metric is None:
                 continue
+            # only collect scalar metrics
             for key in metric:
                 if hasattr(metric[key], '__len__') and len(metric[key]) > 1:
                     continue
@@ -200,12 +258,36 @@ def calc_benchmark(preds, labels, keep_batchdim=True, eps=1e-8):
                     benchmark_metrics[key].append(metric[key])
                 else:
                     benchmark_metrics[key] = [metric[key]]
+        # convert lists to numpy arrays
         for key in benchmark_metrics:
             if isinstance(benchmark_metrics[key], list):
                 benchmark_metrics[key] = np.array(benchmark_metrics[key])
     else:
-        y_true = (labels['cls'].flatten() > 0.5).to(torch.float32)
         y_pred = (preds['cls'].argmax(dim=-2).flatten() > 0.5).to(torch.float32)
+        y_true = (labels['cls'].flatten() > 0.5).to(torch.float32)
         benchmark_metrics.update(topks_roc_prc_metrics(y_pred, y_true, ks=(0.5, 1, 2, 4), multiples_of_true=True))
 
     return benchmark_metrics
+
+
+def save_summary_metrics(metrics, save_path):
+    """ Save summary metrics to a yaml file.
+        metrics: dict containing summary metrics
+        save_path: path to save the yaml file
+    """
+    pass
+
+
+def save_individual_metrics(metrics, save_path):
+    """ Save individual metrics to a CSV file without Pandas.
+        metrics: list of dicts, each dict contains metrics for a batch
+        save_path: path to save the CSV file
+    """
+    keys = list(metrics.keys())
+    csv_lines = [','.join(keys)]
+    for i in range(len(metrics[keys[0]])):
+        csv_lines.append(','.join([str(metrics[key][i]) for key in keys]))
+
+    with open(save_path, 'w') as f:
+        f.writelines('\n'.join(csv_lines))    
+    return

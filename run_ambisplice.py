@@ -3,11 +3,9 @@ import datetime
 import numpy as np
 import pandas as pd
 
-# import hydra
-import GPUtil
 import hydra
+import GPUtil
 import omegaconf
-import yaml
 
 import torch
 import torch.nn as nn
@@ -16,6 +14,8 @@ from AmbiSplice import utils
 from AmbiSplice import model
 from AmbiSplice import dataset
 from AmbiSplice import litmodule
+from AmbiSplice import loss_metrics
+from AmbiSplice import tensor_utils
 
 ilogger = utils.get_pylogger(__name__)
 
@@ -53,15 +53,32 @@ def get_torch_model(model_cfg: omegaconf.DictConfig):
     AR = np.asarray([1, 1, 1, 1, 4, 4, 4, 4,
                     10, 10, 10, 10, 25, 25, 25, 25])
     CL = 2 * np.sum(AR * (W - 1))
-    torch_model = model.PangolinSingle(L=L, W=W, AR=AR, **model_cfg)
+
+    if model_cfg.type in ('AmbiSplice', 'ambisplice'):
+        torch_model = model.AmbiSpliceSingle(L=L, W=W, AR=AR, CL=CL, **model_cfg)
+    elif model_cfg.type in ('Pangolin', 'pangolin'):
+        torch_model = model.Pangolin(L=L, W=W, AR=AR, **model_cfg)
+    elif model_cfg.type in ('PangolinSingle', 'pangolinsingle'):
+        torch_model = model.PangolinSingle(L=L, W=W, AR=AR, **model_cfg)
+    else:
+        raise ValueError(f"Unknown model type: {model_cfg.type}")
+
+    if model_cfg.state_dict_path is not None:
+        state_dict_path = os.path.abspath(os.path.expanduser(model_cfg.state_dict_path))
+        if not os.path.isfile(state_dict_path):
+            raise ValueError(f"Model state_dict path {state_dict_path} does not exist!")
+        ilogger.info(f"Loading model state_dict from {state_dict_path}")
+        state_dict = torch.load(state_dict_path, map_location='cpu', weights_only=True)
+        torch_model.load_state_dict(state_dict, strict=False)
     return torch_model
 
 
 def get_datasets(dataset_cfg: omegaconf.DictConfig):
     """ Prepare training, validation, and prediction datasets."""
 
-    if dataset_cfg.type in ('AmbiSplice', 'ambisplice'):
+    if dataset_cfg.type in ('GeneSplice', 'genesplice'):
         meta_df_path = dataset_cfg.file_path
+        ilogger.info(f"Loading metadata from {meta_df_path}")
         meta_df = pd.read_pickle(meta_df_path)
 
         test_chroms = ['chr1', 'chr3', 'chr5', 'chr7', 'chr9']
@@ -71,10 +88,10 @@ def get_datasets(dataset_cfg: omegaconf.DictConfig):
 
         isin_test = meta_df['chrom'].isin(test_chroms)
         test_df = meta_df[isin_test].reset_index(drop=True)
-        train_val = meta_df[~ isin_test].reset_index(drop=True)
+        train_val_df = meta_df[~ isin_test].reset_index(drop=True)
 
         # A poor man's method to split train and val using chrom column for stratification
-        chrom_groups = train_val.groupby('chrom')
+        chrom_groups = train_val_df.groupby('chrom')
         train_list = []
         val_list = []
         for chrom, group in chrom_groups:
@@ -95,19 +112,18 @@ def get_datasets(dataset_cfg: omegaconf.DictConfig):
         print(f"Test set size: {len(test_df)}")    
 
         datasets = {
-            'train': dataset.SpliceDataset(train_df, epoch_size=dataset_cfg.train_size, summarize=True, **dataset_cfg),
-            'val': dataset.SpliceDataset(val_df, epoch_size=dataset_cfg.val_size, summarize=False, **dataset_cfg),
-            'test': dataset.SpliceDataset(test_df, epoch_size=dataset_cfg.test_size, summarize=False, **dataset_cfg),
-            'predict': dataset.SpliceDataset(test_df, epoch_size=dataset_cfg.predict_size, summarize=False, **dataset_cfg)
+            'train': dataset.GeneSpliceDataset(train_df, epoch_size=dataset_cfg.train_size, summarize=True, **dataset_cfg),
+            'val': dataset.GeneSpliceDataset(val_df, epoch_size=dataset_cfg.val_size, summarize=False, **dataset_cfg),
+            'test': dataset.GeneSpliceDataset(test_df, epoch_size=dataset_cfg.test_size, summarize=False, **dataset_cfg),
+            'predict': dataset.GeneSpliceDataset(test_df, epoch_size=dataset_cfg.predict_size, summarize=False, **dataset_cfg),
         }
     elif dataset_cfg.type in ('Pangolin', 'pangolin'):
-        hd5file = dataset_cfg.file_path
 
         datasets = {
             'train': dataset.PangolinDataset(split='train', epoch_size=dataset_cfg.train_size, summarize=True, **dataset_cfg),
             'val': dataset.PangolinDataset(split='val', epoch_size=dataset_cfg.val_size, summarize=False, **dataset_cfg),
             'test': dataset.PangolinDataset(split='test', epoch_size=dataset_cfg.test_size, summarize=False, **dataset_cfg),
-            'predict': dataset.PangolinDataset(split='test', epoch_size=dataset_cfg.predict_size, summarize=False, **dataset_cfg)
+            'predict': dataset.PangolinDataset(split='test', epoch_size=dataset_cfg.predict_size, summarize=False, **dataset_cfg),
         }
     else:
         raise ValueError(f"Unknown dataset type: {dataset_cfg.type}")
@@ -115,18 +131,62 @@ def get_datasets(dataset_cfg: omegaconf.DictConfig):
     return datasets
 
 
-def get_lit_data(datasets, dataloader_cfg: omegaconf.DictConfig):
-    lit_data = litmodule.OmniDataModule(train_dataset=datasets['train'],
-                                        val_dataset=datasets['val'],
-                                        test_dataset=datasets['test'],
-                                        predict_dataset=datasets['predict'],
-                                        **dataloader_cfg)
-    return lit_data
+def get_litdata(datasets, dataloader_cfg: omegaconf.DictConfig):
+    litdata = litmodule.OmniDataModule(train_dataset=datasets['train'],
+                                       val_dataset=datasets['val'],
+                                       test_dataset=datasets['test'],
+                                       predict_dataset=datasets['predict'],
+                                       **dataloader_cfg)
+    return litdata
 
-def get_lit_run(cfg: omegaconf.DictConfig, model: nn.Module):
-    lit_run = litmodule.OmniRunModule(model=model, cfg=cfg)
-    return lit_run
 
+def get_litrun(cfg: omegaconf.DictConfig, model: nn.Module):
+    litrun = litmodule.OmniRunModule(model=model, cfg=cfg)
+    return litrun
+
+
+def get_ensemble_litruns(main_cfg, model=None):
+    """ Get ensemble litruns from the main config
+        Only handle two config cases: main_cfg.ensemble.model and main_cfgensemble.litrun
+    """
+
+    def get_ensemble_cfgs(ensemble_cfg):
+        """ Convert ensemble_cfg.model to a list of model cfgs."""
+        ilogger.info(f"Ensemble config:\n{omegaconf.OmegaConf.to_yaml(ensemble_cfg)}")
+        cfgs = []
+        for key, val in ensemble_cfg.items():
+            if val is None or val[0] is None:
+                continue
+            for i, v in enumerate(val):
+                if i >= len(cfgs):
+                    cfgs.append({})
+                cfgs[i][key] = v
+        return cfgs
+
+    model_cfgs = get_ensemble_cfgs(main_cfg.ensemble.model) if main_cfg.ensemble.model is not None else None
+    litrun_cfgs = get_ensemble_cfgs(main_cfg.ensemble.litrun) if main_cfg.ensemble.litrun is not None else None
+
+    ensemble_size = max(len(model_cfgs) if model_cfgs else 0,
+                        len(litrun_cfgs) if litrun_cfgs else 0)
+    if ensemble_size == 0:
+        raise ValueError("Ensemble size is zero! Please provide ensemble.model and/or ensemble.litrun.")
+
+    ilogger.info(f"Ensemble size: {ensemble_size}")
+    # get the list of models (which may be the same model)
+    if model_cfgs:
+        assert len(model_cfgs) == ensemble_size, "Length of ensemble.model does not match ensemble size!"
+        models = [get_torch_model(omegaconf.OmegaConf.merge(main_cfg.model, omegaconf.OmegaConf.create(cfg))) for cfg in model_cfgs]
+    else:
+        models = [model for _ in range(ensemble_size)]
+    # get the list of litrun (which may be the same litrun)
+    if litrun_cfgs:
+        assert len(litrun_cfgs) == ensemble_size, "Length of ensemble.litrun does not match ensemble size!"
+        litruns = [get_litrun(omegaconf.OmegaConf.merge(main_cfg.litrun, omegaconf.OmegaConf.create(cfg)), model=models[i]) for i, cfg in enumerate(litrun_cfgs)]
+    else:
+        litruns = [get_litrun(main_cfg.litrun, model=models[i]) for i in range(ensemble_size)]
+        
+    return litruns
+    
 
 @hydra.main(version_base=None, config_path="./configs", config_name="train.yaml")
 def main(main_cfg: omegaconf.DictConfig):
@@ -138,49 +198,100 @@ def main(main_cfg: omegaconf.DictConfig):
     # 5) cross-entropy loss for classification (two classes)
     # 6) BCELoss for usage while masking off nucleotides with negative usage (assigned in data processing)
     # 7) trained for 10 epochs, little changes in loss after 2 epoches. Saved model after every epoch. Chose best based on val loss.
-    # epoch train_loss val_loss
-    # 0 0.00658477892685834 0.004716315679716134
-    # 1 0.0045675282197297105 0.004415887669691599
-    # 2 0.004811793682136806 0.004618272451537466
-    # 3 0.0045143571978752 0.004389756265428374
-    # 4 0.0042724353038384255 0.004255377201714269
-    # 5 0.004095182792971297 0.004187629859801202
-    # 6 0.004493844392550496 0.0045338927623110835
-    # 7 0.00440326978519716 0.0044299452549822005
-    # 8 0.004298632183430625 0.004294230581608949
-    # 9 0.00419190875022965 0.004320022200705696
-    # 10 0.004074970081213211 0.004217715382484738
+    #           epoch train_loss val_loss
+    #           0 0.00658477892685834 0.004716315679716134
+    #           1 0.0045675282197297105 0.004415887669691599
+    #           2 0.004811793682136806 0.004618272451537466
+    #           3 0.0045143571978752 0.004389756265428374
+    #           4 0.0042724353038384255 0.004255377201714269
+    #           5 0.004095182792971297 0.004187629859801202
+    #           6 0.004493844392550496 0.0045338927623110835
+    #           7 0.00440326978519716 0.0044299452549822005
+    #           8 0.004298632183430625 0.004294230581608949
+    #           9 0.00419190875022965 0.004320022200705696
+    #           10 0.004074970081213211 0.004217715382484738
+    # 8) eight models are trained separately for four tissues. One for 'cls' and one for 'psi' in each tissue.
+    # 9) three models are averaged for final prediction
 
     # cfg_path = os.path.join(os.getcwd(), 'configs', 'train.yaml')
     # main_cfg = omegaconf.OmegaConf.load(cfg_path)
-    # omegaconf.OmegaConf.set_struct(main_cfg, False)  # allow new attribute assignment
 
     omegaconf.OmegaConf.set_struct(main_cfg, False)  # allow new attribute assignment
     accelerator, devices = get_accelerator_devices(gpus=main_cfg.gpus)
 
     torch_model = get_torch_model(main_cfg.model)
-    lit_run = get_lit_run(main_cfg.litrun, torch_model)
+    litrun = get_litrun(main_cfg.litrun, torch_model)
 
     datasets = get_datasets(main_cfg.dataset)
-    lit_data = get_lit_data(datasets, main_cfg.dataloader)
+    litdata = get_litdata(datasets, main_cfg.dataloader)
 
     if main_cfg.stage in ('train', 'training', 'fit'):
         ilogger.info(f"Training model with config:\n{omegaconf.OmegaConf.to_yaml(main_cfg)}")
-            # strategy="ddp_find_unused_parameters_false" if len(devices) > 1 else None,
-            # strategy="ddp" if len(devices) > 1 else None,
-            # accumulate_grad_batches=main_cfg.trainer.accumulate_grad_batches,
-        trainer = lit_run.fit(lit_data, save_cfg=main_cfg, devices=devices, debug=main_cfg.debug)
+        trainer = litrun.fit(litdata, save_cfg=main_cfg, accelerator=accelerator, devices=devices, debug=main_cfg.debug)
         ilogger.info("Training completed.")
+        
         return trainer
     elif main_cfg.stage in ('test', 'testing', 'eval', 'evaluate'):
 
-        test_outputs = lit_run.evaluate(lit_data, save_prefix=main_cfg.save_prefix, accelerator=accelerator, devices=devices, debug=main_cfg.debug)
+        if not main_cfg.ensemble.enable:
+            eval_outputs = litrun.evaluate(datamodule=litdata,
+                                           save_prefix=main_cfg.save_prefix, save_individual=main_cfg.save_individual,
+                                           accelerator=accelerator, devices=devices, debug=main_cfg.debug)            
+        else:
+            litruns = get_ensemble_litruns(main_cfg, model=torch_model)
+            epoch_feats = None
+            ensemble_cls = []
+            ensemble_psi = []
+            for i, litrun in enumerate(litruns):
+                ilogger.info(f"Evaluating ensemble model {i+1}/{len(litruns)}")
+                eval_outputs = litrun.evaluate(datamodule=litdata, 
+                                               save_prefix=f"{main_cfg.save_prefix}_ens{i+1}", save_individual=False, 
+                                               accelerator=accelerator, devices=devices, debug=main_cfg.debug)
+
+                if epoch_feats is None:
+                    epoch_feats = eval_outputs[0]  # same for all ensemble members
+                ensemble_cls.append(eval_outputs[1]['cls'])  # list of tensors
+                ensemble_psi.append(eval_outputs[1]['psi'])  # list of tensors
+                
+                # delete litrun to save memory
+                del litrun
+                del eval_outputs
+                torch.cuda.empty_cache()
+
+            # average the ensemble outputs
+            avg_cls = torch.mean(torch.stack(ensemble_cls, dim=0), dim=0)
+            avg_psi = torch.mean(torch.stack(ensemble_psi, dim=0), dim=0)
+            eval_outputs = (epoch_feats, {'cls': avg_cls, 'psi': avg_psi})
+
+            save_path = f"{main_cfg.save_prefix}_ens_outputs.pt"
+            ilogger.info(f"Saving ensemble outputs to {save_path} ...")
+            torch.save(eval_outputs, save_path)
+            ilogger.info(f"Ensemble outputs saved to {save_path}")
+            
+            ensemble_metrics = loss_metrics.calc_benchmark(eval_outputs[1], eval_outputs[0], keep_batchdim=False)
+            if main_cfg.save_prefix is not None:
+                metrics_path = f"{main_cfg.save_prefix}_ens_metrics.yaml"
+                tensor_utils.to_yaml(ensemble_metrics, metrics_path)
+                ilogger.info(f"Ensemble summary metrics saved to {metrics_path}")
+
+                if main_cfg.save_individual:
+                    ind_metrics = loss_metrics.calc_benchmark(eval_outputs[1], eval_outputs[0], keep_batchdim=True)
+                    metrics_path = f"{main_cfg.save_prefix}_ens_ind_metrics.csv"
+                    ilogger.info(f"Saving ensemble individual metrics to {metrics_path} ...")
+                    loss_metrics.save_individual_metrics(ind_metrics, metrics_path)
+                    ilogger.info(f"Ensemble individual metrics saved to {metrics_path}")
+            else:
+                ilogger.info(f"Ensemble summary metrics:\n{omegaconf.OmegaConf.to_yaml(ensemble_metrics)}")
 
         ilogger.info("Testing completed.")
-        return test_outputs
+
+        return eval_outputs
     elif main_cfg.stage in ('predict', 'inference', 'pred'):
-        pred_outputs = lit_run.predict(datamodule=lit_data, save_prefix=main_cfg.save_prefix, accelerator=accelerator, devices=devices, debug=main_cfg.debug)
+        pred_outputs = litrun.predict(datamodule=litdata,
+                                      save_prefix=main_cfg.save_prefix, save_individual=main_cfg.save_individual, 
+                                      accelerator=accelerator, devices=devices, debug=main_cfg.debug)
         ilogger.info("Prediction completed.")
+
         return pred_outputs
     else:
         raise ValueError(f"Unknown stage: {main_cfg.stage}")

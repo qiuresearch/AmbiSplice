@@ -19,7 +19,7 @@ class ResBlock(nn.Module):
     def __init__(self, L, W, AR, pad=True):
         super(ResBlock, self).__init__()
         self.bn1 = nn.BatchNorm1d(L)
-        s = 1
+        s = 1 # stride
         # padding calculation: https://discuss.pytorch.org/t/how-to-keep-the-shape-of-input-and-output-same-when-dilation-conv/14338/2
         if pad:
             padding = int(1 / 2 * (1 - L + AR * (W - 1) - s + L * s))
@@ -70,6 +70,7 @@ class SpliceBaseModule(nn.Module):
         loss_items['psi_loss'] = F.binary_cross_entropy_with_logits(
             preds['psi_logits'],
             labels['psi'],
+            weight=labels['psi'] >= 0,  # mask out negative values
             reduction='mean')
 
         loss = loss_items['cls_loss'] + loss_items['psi_loss']
@@ -93,12 +94,12 @@ class SpliceBaseModule(nn.Module):
             return metric_items
         
         # compute precision, recall, f1 for cls
-        cls_pred = F.softmax(preds['cls_logits'], dim=1).permute(0, 2, 1)  # (B, crop_size, 4)
-        cls_label = F.one_hot(labels['cls'], num_classes=cls_pred.shape[-1]).to(cls_pred.dtype)  # (B, crop_size, 4)
+        cls_pred = F.softmax(preds['cls_logits'], dim=1).permute(0, 2, 1)  # (B, crop_size, num_classes)
+        cls_label = F.one_hot(labels['cls'], num_classes=cls_pred.shape[-1]).to(cls_pred.dtype)  # (B, crop_size, num_classes)
 
-        cls_tp = (cls_pred * cls_label).sum(dim=(0, 1))  # (4,)
-        cls_fp = (cls_pred * (1 - cls_label)).sum(dim=(0, 1))  # (4,)
-        cls_fn = ((1 - cls_pred) * cls_label).sum(dim=(0, 1))  # (4,)
+        cls_tp = (cls_pred * cls_label).sum(dim=(0, 1))  # (num_classes,)
+        cls_fp = (cls_pred * (1 - cls_label)).sum(dim=(0, 1))  # (num_classes,)
+        cls_fn = ((1 - cls_pred) * cls_label).sum(dim=(0, 1))  # (num_classes,)
 
         cls_precision = cls_tp / (cls_tp + cls_fp + eps)
         cls_recall = cls_tp / (cls_tp + cls_fn + eps)
@@ -202,18 +203,18 @@ class PangolinSingle(SpliceBaseModule):
         return {'cls_logits': out1, 'psi_logits': out2.squeeze(dim=1)}
 
 
-class Pangolin(nn.Module):
-    def __init__(self, L, W, AR):
+class Pangolin(SpliceBaseModule):
+    def __init__(self, L, W, AR, **kwargs):
         super(Pangolin, self).__init__()
         self.n_chans = L
-        self.conv1 = nn.Conv1d(4, L, 1)
+        self.conv1 = nn.Conv1d(4, L, 1) # in_channels, out_channels, kernel_size
         self.skip = nn.Conv1d(L, L, 1)
         self.resblocks, self.convs = nn.ModuleList(), nn.ModuleList()
         for i in range(len(W)):
             self.resblocks.append(ResBlock(L, W[i], AR[i]))
             if (((i + 1) % 4 == 0) or ((i + 1) == len(W))):
                 self.convs.append(nn.Conv1d(L, L, 1))
-        self.conv_last1 = nn.Conv1d(L, 4, 1)
+        self.conv_last1 = nn.Conv1d(L, 2, 1)
         self.conv_last2 = nn.Conv1d(L, 1, 1)
         self.conv_last3 = nn.Conv1d(L, 2, 1)
         self.conv_last4 = nn.Conv1d(L, 1, 1)
@@ -253,16 +254,28 @@ class Pangolin(nn.Module):
                 skip = skip + dense
         #CL = 2 * np.sum(AR * (W - 1))
         #skip = F.pad(skip, (-CL // 2, -CL // 2))
+        skip = skip[:, :, CL: -CL]
         out1 = self.conv_last1(skip)
         out2 = self.conv_last2(skip)
-        out1 = F.softmax(self.conv_last1(skip), dim=1)
-        out2 = torch.sigmoid(self.conv_last2(skip))
-        out3 = F.softmax(self.conv_last3(skip), dim=1)
-        out4 = torch.sigmoid(self.conv_last4(skip))
-        out5 = F.softmax(self.conv_last5(skip), dim=1)
-        out6 = torch.sigmoid(self.conv_last6(skip))
-        out7 = F.softmax(self.conv_last7(skip), dim=1)
-        out8 = torch.sigmoid(self.conv_last8(skip))
+        out3 = self.conv_last3(skip)
+        out4 = self.conv_last4(skip)
+        out5 = self.conv_last5(skip)
+        out6 = self.conv_last6(skip)
+        out7 = self.conv_last7(skip)
+        out8 = self.conv_last8(skip)
+
+        # out1 = F.softmax(self.conv_last1(skip), dim=1)
+        # out2 = torch.sigmoid(self.conv_last2(skip))
+        # out3 = F.softmax(self.conv_last3(skip), dim=1)
+        # out4 = torch.sigmoid(self.conv_last4(skip))
+        # out5 = F.softmax(self.conv_last5(skip), dim=1)
+        # out6 = torch.sigmoid(self.conv_last6(skip))
+        # out7 = F.softmax(self.conv_last7(skip), dim=1)
+        # out8 = torch.sigmoid(self.conv_last8(skip))
+
+        # heart, liver, brain, testis
+        return {'cls_logits': out1, 
+                'psi_logits': out2.squeeze(dim=1),}
         return torch.cat([out1, out2, out3, out4, out5, out6, out7, out8], 1)
     
 

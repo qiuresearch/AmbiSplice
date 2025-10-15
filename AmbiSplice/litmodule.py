@@ -41,7 +41,7 @@ def summarize_tensors(vars_dict, prefix=''):
             vtype = "Tensor"
             requires_grad = str(v.requires_grad)
         else:
-            shape = "-"
+            shape = f'({len(v)})' if isinstance(v, (list, tuple)) else "-"
             dtype = "-"
             device = "-"
             vtype = type(v).__name__
@@ -82,6 +82,19 @@ def summarize_epoch_metrics(epoch_metrics, prefix='', logger=None, logger_prefix
                     rank_zero_only=False,
             )
     return avg_metrics
+
+
+def save_epoch_metrics(epoch_metrics, save_path):
+    """ Save epoch metrics (a list of dicts) to a CSV file without Pandas. """
+    if not epoch_metrics or len(epoch_metrics) == 0:
+        print("No epoch metrics to save.")
+        return
+
+    with open(save_path, 'w') as f:
+        keys = list(epoch_metrics[0].keys())
+        f.write(','.join(keys) + '\n')
+        for batch_metrics in epoch_metrics:
+            f.write(','.join(str(batch_metrics[k].item()) for k in keys) + '\n')
 
 
 def has_wandb_connectivity(host="api.wandb.ai", port=443, timeout=2.0):
@@ -625,8 +638,12 @@ class OmniRunModule(LightningModule):
             use_distributed_sampler=False,
             enable_progress_bar=True,
             enable_model_summary=True,
+            acccelerator=accelerator,
             devices=devices,
         )
+        # strategy="ddp_find_unused_parameters_false" if len(devices) > 1 else None,
+        # strategy="ddp" if len(devices) > 1 else None,
+        # accumulate_grad_batches=main_cfg.trainer.accumulate_grad_batches,
 
         trainer.fit(
             model=self,
@@ -635,8 +652,8 @@ class OmniRunModule(LightningModule):
         )
 
         return trainer
-    
-    def evaluate(self, datamodule, save_prefix=None, accelerator="cuda", devices="auto", debug=False, **kwargs):
+
+    def evaluate(self, datamodule, save_prefix=None, save_individual=False, accelerator="cuda", devices="auto", debug=False, **kwargs):
         """ Test the model using PyTorch Lightning Trainer.
         Args:
             datamodule: LightningDataModule
@@ -647,7 +664,8 @@ class OmniRunModule(LightningModule):
             predictions: list of (batch_feats, preds) tuples from test_step
         """
 
-        trainer = Trainer(enable_progress_bar=True,
+        trainer = Trainer(**self.cfg.trainer,
+                          enable_progress_bar=True,
                           enable_model_summary=True,
                           accelerator=accelerator,
                           devices=devices)
@@ -658,26 +676,20 @@ class OmniRunModule(LightningModule):
             ckpt_path=self.cfg.get('resume_from_ckpt', None),
         )
 
+        # concat all batches to two dicts of tensors (feats, preds)
+        eval_feats, eval_preds = tensor_utils.concat_dicts_outputs(eval_outputs)
+
         if save_prefix is not None and not self.is_child_process:
-            save_path = f"{save_prefix}_eval_outputs.pkl"
+            save_path = f"{save_prefix}_eval_outputs.pt"
             ilogger.info(f"Saving outputs to {save_path} ...")
-            with open(save_path, 'wb') as f:
-                pickle.dump(eval_outputs, f)
+            torch.save((eval_feats, eval_preds), save_path)
             ilogger.info(f"Outputs saved to {save_path}")
 
             if self.predict_epoch_metrics and len(self.predict_epoch_metrics) > 0:
                 metrics_path = f"{save_prefix}_batch_metrics.csv"
                 ilogger.info(f"Saving batch metrics to {metrics_path} ...")
-                with open(metrics_path, 'w') as f:
-                    keys = list(self.predict_epoch_metrics[0].keys())
-                    f.write(','.join(keys) + '\n')
-                    for batch_metrics in self.predict_epoch_metrics[1:]:
-                        f.write(','.join(str(batch_metrics[k].item()) for k in keys) + '\n')
-
+                save_epoch_metrics(self.predict_epoch_metrics, metrics_path)
                 ilogger.info(f"Batch metrics saved to {metrics_path}")
-
-        # concat all batch outputs for metrics calculation
-        eval_feats, eval_preds = tensor_utils.concat_dicts_outputs(eval_outputs)
 
         ilogger.info("Calculating summary metrics ...")
         sum_metrics = loss_metrics.calc_benchmark(eval_preds, eval_feats, keep_batchdim=False)
@@ -691,22 +703,18 @@ class OmniRunModule(LightningModule):
             print("Summary Metrics:")
             print(sum_metrics)
 
-        if save_prefix is not None and not self.is_child_process:
+        if save_individual and save_prefix is not None and not self.is_child_process:
             ilogger.info("Calculating individual metrics ...")
             ind_metrics = loss_metrics.calc_benchmark(eval_preds, eval_feats, keep_batchdim=True)
+
             metrics_path = f"{save_prefix}_ind_metrics.csv"
             ilogger.info(f"Saving test individual metrics to {metrics_path} ...")
-            keys = list(ind_metrics.keys())
-            csv_lines = [','.join(keys)]
-            for i in range(len(ind_metrics[keys[0]])):
-                csv_lines.append(','.join([str(ind_metrics[key][i]) for key in keys]))
-
-            with open(metrics_path, 'w') as f:
-                f.writelines('\n'.join(csv_lines))
-
+            loss_metrics.save_individual_metrics(ind_metrics, metrics_path)
             ilogger.info(f"Test individual metrics saved to {metrics_path}")
+        else:
+            ind_metrics = None
 
-        return eval_outputs
+        return eval_feats, eval_preds, sum_metrics
 
     def predict(self, datamodule, save_prefix=None, accelerator="cuda", devices="auto", debug=False, **kwargs):
         """ Inference using PyTorch Lightning Trainer.
@@ -730,11 +738,19 @@ class OmniRunModule(LightningModule):
             ckpt_path=self.cfg.get('resume_from_ckpt', None),
         )
 
+        # concat all batches to two dicts of tensors (batch_feats, preds)
+        input_feats, pred_targets = tensor_utils.concat_dicts_outputs(pred_outputs)
+
         if save_prefix is not None and not self.is_child_process:
-            save_path = f"{save_prefix}_pred_outputs.pkl"
+            save_path = f"{save_prefix}_pred_outputs.pt"
             ilogger.info(f"Saving predict outputs to {save_path} ...")
-            with open(save_path, 'wb') as f:
-                pickle.dump(pred_outputs, f)
+            torch.save((input_feats, pred_targets), save_path)
             ilogger.info(f"Predict outputs saved to {save_path}")
+            
+            if self.predict_epoch_metrics and len(self.predict_epoch_metrics) > 0:
+                metrics_path = f"{save_prefix}_batch_metrics.csv"
+                ilogger.info(f"Saving batch metrics to {metrics_path} ...")
+                save_epoch_metrics(self.predict_epoch_metrics, metrics_path)
+                ilogger.info(f"Batch metrics saved to {metrics_path}")            
 
         return pred_outputs
