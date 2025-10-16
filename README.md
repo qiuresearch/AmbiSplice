@@ -8,7 +8,7 @@ https://download.pytorch.org/whl/cu126
 
 pip install lightning
 
-conda install -c conda-forge pandas numpy condahydra-core omegaconf wandb gputil matplotlib beartype h5py -y
+conda install -c conda-forge pandas numpy condahydra-core omegaconf wandb gputil matplotlib beartype h5py pytables -y
 
 ## Datasets
 ### Pangolin original data

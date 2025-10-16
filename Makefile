@@ -16,13 +16,13 @@ help: ## Display this help message
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
 
 install: ## Install dependencies
-	source $(CONDA_SH_PATH) || exit 1
-	conda create -n $(CONDA_ENV_NAME) python=3.11 -y || exit 1
-	conda activate $(CONDA_ENV_NAME) || exit 1
+	source $(CONDA_SH_PATH)
+	conda create -n $(CONDA_ENV_NAME) python=3.11 -y
+	conda activate $(CONDA_ENV_NAME)
 	# Install PyTorch with CUDA 12.6 support
 	pip install torch==2.6.0 torchvision==0.21.0 torchaudio==2.6.0 --index-url https://download.pytorch.org/whl/cu126
 	pip install lightning
-	conda install -c conda-forge pandas numpy hydra-core omegaconf wandb gputil matplotlib beartype h5py -y
+	conda install -c conda-forge pandas numpy hydra-core omegaconf wandb gputil matplotlib beartype h5py pytables -y
 
 pangolin_datasets: ## Prepare Pangolin datasets
 	echo "Preparing Pangolin datasets..."
@@ -34,7 +34,7 @@ pangolin_download_genomes: ## Download Pangolin genomes
 	wget https://ftp.ensembl.org/pub/release-99/fasta/rattus_norvegicus/dna/Rattus_norvegicus.Rnor_6.0.dna.toplevel.fa.gz
 
 
-pangolin_test: ## Test Pangolin model
+pangolin_eval: ## Evaluate Pangolin model
 	# Run Pangolin model (final.modelnum.tissue.epoch) on Pangolin dataset
 	conda run --no-capture-output --name $(CONDA_ENV_NAME) python -u run_ambisplice.py stage=eval \
 	    save_prefix=Pangolin_model_test \
@@ -44,6 +44,20 @@ pangolin_test: ## Test Pangolin model
 		model.state_dict_path=$(HOME)/github/Pangolin/pangolin/models/final.1.0.3.v2 \
 		litrun.resume_from_ckpt=null \
 		ensemble.enable=false
+
+pangolin_ensemble_eval: ## Evaluate Pangolin ensemble average
+	# Run Pangolin model (final.modelnum.tissue.epoch) on Pangolin dataset
+	conda run --no-capture-output --name $(CONDA_ENV_NAME) python -u run_ambisplice.py stage=eval \
+	    save_prefix=Pangolin_ens_test \
+	    dataset.type=Pangolin \
+		dataset.file_path=$(HOME)/github/Pangolin_train/preprocessing/dataset_train_all.h5 \
+		model.type=Pangolin \
+		model.state_dict_path=null \
+		ensemble.enable=true \
+		ensemble.model.type=[Pangolin,Pangolin,Pangolin] \
+		ensemble.model.state_dict_path=[$(HOME)/github/Pangolin/pangolin/models/final.1.0.3.v2,$(HOME)/github/Pangolin/pangolin/models/final.2.0.3.v2,$(HOME)/github/Pangolin/pangolin/models/final.3.0.3.v2] \
+		litrun.resume_from_ckpt=null
+
 
 pangolin_train_single: ## Train Pangolin model
 	# Run Pangolin model (final.modelnum.tissue.epoch) on Pangolin dataset
@@ -64,10 +78,10 @@ test_human: ## Test on Human dataset
 		dataset.type=ambisplice \
 		dataset.file_path=$(HOME)/bench/AmbiSplice/data/ambisplice_test.h5
 
-train_human_single: ## Train on Human Heart dataset
+train_gwsplice_single: ## Train on Human Heart dataset
 	conda run --no-capture-output --name $(CONDA_ENV_NAME) python -u run_ambisplice.py stage=train \
-		dataset.type=ambisplice \
-		dataset.file_path=rna_sites.pkl \
+		dataset.type=gwsplice \
+		dataset.file_path=data/gwsplice_feats_labels.pkl \
 		litrun.max_epochs=10 \
-		model.type=AmbiSplice \
+		model.type=GWSplice \
 		litrun.resume_from_ckpt=null \ # checkpoints/PangolinSingle_2025-10-07_06-49-35_eny45xtr/epoch=095-step=096000.ckpt

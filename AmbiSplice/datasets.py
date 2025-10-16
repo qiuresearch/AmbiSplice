@@ -1,5 +1,6 @@
 import os
 import h5py
+import tables
 import torch
 from torch.utils.data import Dataset
 import numpy as np
@@ -10,7 +11,112 @@ from . import utils
 
 ilogger = utils.get_pylogger(__name__)
 
-class GeneSpliceDataset(Dataset):
+
+class PangolinDataset(Dataset):
+    def __init__(self, file_path, **kwargs):
+        super(PangolinDataset, self).__init__()
+        self.file_path = file_path
+        self.data = h5py.File(file_path, 'r', libver='latest')
+        self.ctr = 0
+
+    def __getitem__(self, idx):
+        self.ctr += 1
+        if self.ctr % 100000 == 0: # workaround to avoid memory issues
+            self.data.close()
+            self.data = h5py.File(self.file_path, 'r', libver='latest')
+        X = self.data['X' + str(idx)][:].T # transpose to (4, L)
+        Y = self.data['Y' + str(idx)][:].T # transpose to (12, L)
+        Z = self.data['Z' + str(idx)][:] # (4,): [chrom, start, end, strand]
+
+        # tissue order: heart, liver, brain, testis
+        # each tissue: unspliced, spliced, usage
+        sample_feats = {
+            'seq': splice_feats.decode_onehot(X, dim=0, idx2base=np.array(['A', 'C', 'G', 'T', 'N'])),
+            'seq_onehot': X,
+            'cls': np.argmax(Y[0:2, :], axis=0), # 0: unspliced, 1: spliced
+            'psi': Y[2, :], # usage
+            'chrom': Z[0].decode(),
+            'start': int(Z[1]),
+            'end': int(Z[2]),
+            'strand': Z[3].decode(),
+        }
+
+        return sample_feats
+
+    def __len__(self):
+        assert len(self.data) % 3 == 0
+        return len(self.data) // 3
+    
+    def __del__(self):
+        if hasattr(self, 'data') and self.data is not None:
+            self.data.close()
+
+
+class SeqCropsDataset(Dataset):
+    def __init__(self, data, file_path=None, indices=None, num_classes=None, **kwargs):
+        super(SeqCropsDataset, self).__init__()
+
+        self.data = data
+        if isinstance(self.data, str):
+            if not os.path.exists(self.data):
+                raise FileNotFoundError(f"Data file {self.data} does not exist.")
+            self.file_path = self.data
+            self.data = tables.open_file(self.file_path, mode='r')
+        elif self.data is None: # load from file_path
+            if not os.path.exists(file_path):
+                raise FileNotFoundError(f"Data file {file_path} does not exist.")
+            self.file_path = file_path
+            self.data = tables.open_file(file_path, mode='r')
+        elif isinstance(self.data, tables.File):
+            self.file_path = file_path
+        else:
+            raise ValueError("data must be a path to HDF5 file or a tables.File handle.")
+
+        self.indices = indices
+        self.num_classes = num_classes
+        self.iterations = 0
+
+    def __getitem__(self, idx):
+        self.iterations += 1
+
+        if self.iterations % 100000 == -1 and os.path.exists(self.file_path): # workaround to avoid memory issues
+            self.data.close()
+            self.data = tables.open_file(self.file_path, mode='r')
+
+        if self.indices is not None:
+            if idx < 0 or idx >= len(self.indices):
+                raise IndexError(f"Index:{idx} out of bounds for SeqCropsDataset (len(indices): {len(self.indices)}).")
+            idx = self.indices[idx]
+        
+        if idx < 0 or idx >= len(self.data.root.train_feats):
+            raise IndexError(f"Index:{idx} out of bounds for SeqCropsDataset (len(data): {len(self.data.root.train_feats)}).")
+
+        crop_feat = self.data.root.train_feats[idx]
+        sample_feats = {
+            'seq': crop_feat['seq'], # .decode(),
+            'seq_onehot': crop_feat['seq_onehot'],
+            'cls': crop_feat['cls'] if self.num_classes is None else np.minimum(crop_feat['cls'], self.num_classes - 1),
+            'psi': crop_feat['psi'], # usage
+            'chrom': crop_feat['chrom'].decode(),
+            'start': crop_feat['crop_start'][0],
+            'end': crop_feat['crop_end'][0],
+            'strand': crop_feat['strand'].decode(),
+        }
+
+        return sample_feats
+
+    def __len__(self):
+        if self.indices is not None:
+            return len(self.indices)
+        else:
+            return len(self.data.root.train_feats)
+    
+    def __del__(self):
+        if hasattr(self, 'data') and self.data is not None:
+            self.data.close()
+
+
+class GeneSitesDataset(Dataset):
     def __init__(self, meta_df, epoch_size=None, summarize=False,
                  data_dir='./', enable_cache=False, cache_dir='/tmp',
                  weighted_sampling=False, dynamic_weights=True, min_quality=None,
@@ -35,7 +141,7 @@ class GeneSpliceDataset(Dataset):
             samples_per_seq (int): Number of samples to generate per sequence.
             **kwargs: Additional keyword arguments.
         """
-        super(GeneSpliceDataset, self).__init__()
+        super(GeneSitesDataset, self).__init__()
 
         self.is_child_process = utils.get_rank() # utils.is_child_process()
 
@@ -225,42 +331,3 @@ class GeneSpliceDataset(Dataset):
                 
         return sample_feats
     
-
-class PangolinDataset(Dataset):
-    def __init__(self, file_path, **kwargs):
-        super(PangolinDataset, self).__init__()
-        self.fp = file_path
-        self.data = h5py.File(file_path, 'r', libver='latest')
-        self.ctr = 0
-
-    def __getitem__(self, idx):
-        self.ctr += 1
-        if self.ctr % 100000 == 0: # workaround to avoid memory issues
-            self.data.close()
-            self.data = h5py.File(self.fp, 'r', libver='latest')
-        X = self.data['X' + str(idx)][:].T # transpose to (4, L)
-        Y = self.data['Y' + str(idx)][:].T # transpose to (12, L)
-        Z = self.data['Z' + str(idx)][:] # (4,): [chrom, start, end, strand]
-
-        # tissue order: heart, liver, brain, testis
-        # each tissue: unspliced, spliced, usage
-        batch_feats = {
-            'seq': splice_feats.decode_onehot(X, dim=0, idx2base=np.array(['A', 'C', 'G', 'T', 'N'])),
-            'seq_onehot': X,
-            'cls': np.argmax(Y[0:2, :], axis=0), # 0: unspliced, 1: spliced
-            'psi': Y[2, :], # usage
-            'chrom': Z[0].decode(),
-            'start': int(Z[1]),
-            'end': int(Z[2]),
-            'strand': Z[3].decode(),
-        }
-
-        return batch_feats
-
-    def __len__(self):
-        assert len(self.data) % 3 == 0
-        return len(self.data) // 3
-    
-    def __del__(self):
-        if hasattr(self, 'data'):
-            self.data.close()

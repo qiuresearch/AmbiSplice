@@ -54,12 +54,12 @@ def get_torch_model(model_cfg: omegaconf.DictConfig):
                     10, 10, 10, 10, 25, 25, 25, 25])
     CL = 2 * np.sum(AR * (W - 1))
 
-    if model_cfg.type in ('AmbiSplice', 'ambisplice'):
-        torch_model = models.AmbiSpliceSingle(L=L, W=W, AR=AR, CL=CL, **model_cfg)
-    elif model_cfg.type in ('Pangolin', 'pangolin'):
+    if model_cfg.type.upper() == 'SpliceSingle'.upper():
+        torch_model = models.SpliceSingle(L=L, W=W, AR=AR, CL=CL, **model_cfg)
+    elif model_cfg.type.upper() == 'Pangolin'.upper():
         torch_model = models.Pangolin(L=L, W=W, AR=AR, **model_cfg)
-    elif model_cfg.type in ('PangolinSingle', 'pangolinsingle'):
-        torch_model = models.GWSpliceSingle(L=L, W=W, AR=AR, **model_cfg)
+    elif model_cfg.type.upper() == 'PangolinSingle'.upper():
+        torch_model = models.PangolinSingle(L=L, W=W, AR=AR, **model_cfg)
     else:
         raise ValueError(f"Unknown model type: {model_cfg.type}")
 
@@ -76,7 +76,7 @@ def get_torch_model(model_cfg: omegaconf.DictConfig):
 def get_datasets(dataset_cfg: omegaconf.DictConfig):
     """ Prepare training, validation, and prediction datasets."""
 
-    if dataset_cfg.type in ('GeneSplice', 'genesplice'):
+    if dataset_cfg.type.upper() == 'GeneSites'.upper():
         meta_df_path = dataset_cfg.file_path
         ilogger.info(f"Loading metadata from {meta_df_path}")
         meta_df = pd.read_pickle(meta_df_path)
@@ -109,26 +109,33 @@ def get_datasets(dataset_cfg: omegaconf.DictConfig):
         # show the sizes of the datasets
         print(f"Train set size: {len(train_df)}")
         print(f"Validation set size: {len(val_df)}")
-        print(f"Test set size: {len(test_df)}")    
+        print(f"Test set size: {len(test_df)}")
 
-        datasets = {
-            'train': datasets.GeneSpliceDataset(train_df, epoch_size=dataset_cfg.train_size, summarize=True, **dataset_cfg),
-            'val': datasets.GeneSpliceDataset(val_df, epoch_size=dataset_cfg.val_size, summarize=False, **dataset_cfg),
-            'test': datasets.GeneSpliceDataset(test_df, epoch_size=dataset_cfg.test_size, summarize=False, **dataset_cfg),
-            'predict': datasets.GeneSpliceDataset(test_df, epoch_size=dataset_cfg.predict_size, summarize=False, **dataset_cfg),
+        all_datasets = {
+            'train': datasets.GeneSitesDataset(train_df, epoch_size=dataset_cfg.train_size, summarize=True, **dataset_cfg),
+            'val': datasets.GeneSitesDataset(val_df, epoch_size=dataset_cfg.val_size, summarize=False, **dataset_cfg),
+            'test': datasets.GeneSitesDataset(test_df, epoch_size=dataset_cfg.test_size, summarize=False, **dataset_cfg),
+            'predict': datasets.GeneSitesDataset(test_df, epoch_size=dataset_cfg.predict_size, summarize=False, **dataset_cfg),
         }
-    elif dataset_cfg.type in ('Pangolin', 'pangolin'):
+    elif dataset_cfg.type.upper() == 'SeqCrops'.upper():
+        all_datasets = {
+            'train': datasets.SeqCropsDataset(split='train', epoch_size=dataset_cfg.train_size, summarize=True, **dataset_cfg),
+            'val': datasets.SeqCropsDataset(split='val', epoch_size=dataset_cfg.val_size, summarize=False, **dataset_cfg),
+            'test': datasets.SeqCropsDataset(split='test', epoch_size=dataset_cfg.test_size, summarize=False, **dataset_cfg),
+            'predict': datasets.SeqCropsDataset(split='test', epoch_size=dataset_cfg.predict_size, summarize=False, **dataset_cfg),
+        }
+    elif dataset_cfg.type.upper() == 'Pangolin'.upper():
 
-        datasets = {
-            'train': datasets.PangolinDataset(split='train', epoch_size=dataset_cfg.train_size, summarize=True, **dataset_cfg),
-            'val': datasets.PangolinDataset(split='val', epoch_size=dataset_cfg.val_size, summarize=False, **dataset_cfg),
-            'test': datasets.PangolinDataset(split='test', epoch_size=dataset_cfg.test_size, summarize=False, **dataset_cfg),
-            'predict': datasets.PangolinDataset(split='test', epoch_size=dataset_cfg.predict_size, summarize=False, **dataset_cfg),
+        all_datasets = {
+            'train': datasets.PangolinDataset(file_path=dataset_cfg.train_path, epoch_size=dataset_cfg.train_size, summarize=True, **dataset_cfg),
+            'val': datasets.PangolinDataset(file_path=dataset_cfg.val_path, epoch_size=dataset_cfg.val_size, summarize=False, **dataset_cfg),
+            'test': datasets.PangolinDataset(file_path=dataset_cfg.test_path, epoch_size=dataset_cfg.test_size, summarize=False, **dataset_cfg),
+            'predict': datasets.PangolinDataset(file_path=dataset_cfg.predict_path, epoch_size=dataset_cfg.predict_size, summarize=False, **dataset_cfg),
         }
     else:
         raise ValueError(f"Unknown dataset type: {dataset_cfg.type}")
 
-    return datasets
+    return all_datasets
 
 
 def get_litdata(datasets, dataloader_cfg: omegaconf.DictConfig):

@@ -133,9 +133,9 @@ class SpliceBaseModule(nn.Module):
         return pred_labels
     
 
-class GWSpliceSingle(SpliceBaseModule):
+class SpliceSingle(SpliceBaseModule):
     def __init__(self, L=L, W=W, AR=AR, **kwargs):
-        super(GWSpliceSingle, self).__init__()
+        super(SpliceSingle, self).__init__()
 
         self.n_chans = L
         self.conv1 = nn.Conv1d(4, L, 1)
@@ -202,6 +202,50 @@ class GWSpliceSingle(SpliceBaseModule):
         # return torch.cat([out1, out2], dim=1)
         return {'cls_logits': out1, 'psi_logits': out2.squeeze(dim=1)}
 
+
+class PangolinSingle(SpliceBaseModule):
+    def __init__(self, L, W, AR, **kwargs):
+        super(PangolinSingle, self).__init__()
+        self.n_chans = L
+        self.conv1 = nn.Conv1d(4, L, 1) # in_channels, out_channels, kernel_size
+        self.skip = nn.Conv1d(L, L, 1)
+        self.resblocks, self.convs = nn.ModuleList(), nn.ModuleList()
+        for i in range(len(W)):
+            self.resblocks.append(ResBlock(L, W[i], AR[i]))
+            if (((i + 1) % 4 == 0) or ((i + 1) == len(W))):
+                self.convs.append(nn.Conv1d(L, L, 1))
+        self.conv_last1 = nn.Conv1d(L, 2, 1)
+        self.conv_last2 = nn.Conv1d(L, 1, 1)
+        self.init_weights()
+        
+    def init_weights(self):
+        nn.init.constant_(self.conv_last2.weight, 0.0)
+        nn.init.constant_(self.conv_last2.bias, -5.0)
+
+    def forward(self, batch_feats):
+        x = batch_feats['seq_onehot']
+        # check x dtype and convert to float if needed
+        if x.dtype != torch.float32:
+            x = x.float()
+            
+        conv = self.conv1(x)
+        skip = self.skip(conv)
+        j = 0
+        for i in range(len(W)):
+            conv = self.resblocks[i](conv)
+            if (((i + 1) % 4 == 0) or ((i + 1) == len(W))):
+                dense = self.convs[j](conv)
+                j += 1
+                skip = skip + dense
+        #CL = 2 * np.sum(AR * (W - 1))
+        #skip = F.pad(skip, (-CL // 2, -CL // 2))
+        skip = skip[:, :, CL: -CL]
+        out1 = self.conv_last1(skip)
+        out2 = self.conv_last2(skip)
+
+        return {'cls_logits': out1, 
+                'psi_logits': out2.squeeze(dim=1),}
+    
 
 class Pangolin(SpliceBaseModule):
     def __init__(self, L, W, AR, **kwargs):
