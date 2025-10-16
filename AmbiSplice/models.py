@@ -133,9 +133,9 @@ class SpliceBaseModule(nn.Module):
         return pred_labels
     
 
-class PangolinSingle(SpliceBaseModule):
+class GWSpliceSingle(SpliceBaseModule):
     def __init__(self, L=L, W=W, AR=AR, **kwargs):
-        super(PangolinSingle, self).__init__()
+        super(GWSpliceSingle, self).__init__()
 
         self.n_chans = L
         self.conv1 = nn.Conv1d(4, L, 1)

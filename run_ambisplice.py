@@ -11,8 +11,8 @@ import torch
 import torch.nn as nn
 
 from AmbiSplice import utils
-from AmbiSplice import model
-from AmbiSplice import dataset
+from AmbiSplice import models
+from AmbiSplice import datasets
 from AmbiSplice import litmodule
 from AmbiSplice import loss_metrics
 from AmbiSplice import tensor_utils
@@ -55,11 +55,11 @@ def get_torch_model(model_cfg: omegaconf.DictConfig):
     CL = 2 * np.sum(AR * (W - 1))
 
     if model_cfg.type in ('AmbiSplice', 'ambisplice'):
-        torch_model = model.AmbiSpliceSingle(L=L, W=W, AR=AR, CL=CL, **model_cfg)
+        torch_model = models.AmbiSpliceSingle(L=L, W=W, AR=AR, CL=CL, **model_cfg)
     elif model_cfg.type in ('Pangolin', 'pangolin'):
-        torch_model = model.Pangolin(L=L, W=W, AR=AR, **model_cfg)
+        torch_model = models.Pangolin(L=L, W=W, AR=AR, **model_cfg)
     elif model_cfg.type in ('PangolinSingle', 'pangolinsingle'):
-        torch_model = model.PangolinSingle(L=L, W=W, AR=AR, **model_cfg)
+        torch_model = models.GWSpliceSingle(L=L, W=W, AR=AR, **model_cfg)
     else:
         raise ValueError(f"Unknown model type: {model_cfg.type}")
 
@@ -112,18 +112,18 @@ def get_datasets(dataset_cfg: omegaconf.DictConfig):
         print(f"Test set size: {len(test_df)}")    
 
         datasets = {
-            'train': dataset.GeneSpliceDataset(train_df, epoch_size=dataset_cfg.train_size, summarize=True, **dataset_cfg),
-            'val': dataset.GeneSpliceDataset(val_df, epoch_size=dataset_cfg.val_size, summarize=False, **dataset_cfg),
-            'test': dataset.GeneSpliceDataset(test_df, epoch_size=dataset_cfg.test_size, summarize=False, **dataset_cfg),
-            'predict': dataset.GeneSpliceDataset(test_df, epoch_size=dataset_cfg.predict_size, summarize=False, **dataset_cfg),
+            'train': datasets.GeneSpliceDataset(train_df, epoch_size=dataset_cfg.train_size, summarize=True, **dataset_cfg),
+            'val': datasets.GeneSpliceDataset(val_df, epoch_size=dataset_cfg.val_size, summarize=False, **dataset_cfg),
+            'test': datasets.GeneSpliceDataset(test_df, epoch_size=dataset_cfg.test_size, summarize=False, **dataset_cfg),
+            'predict': datasets.GeneSpliceDataset(test_df, epoch_size=dataset_cfg.predict_size, summarize=False, **dataset_cfg),
         }
     elif dataset_cfg.type in ('Pangolin', 'pangolin'):
 
         datasets = {
-            'train': dataset.PangolinDataset(split='train', epoch_size=dataset_cfg.train_size, summarize=True, **dataset_cfg),
-            'val': dataset.PangolinDataset(split='val', epoch_size=dataset_cfg.val_size, summarize=False, **dataset_cfg),
-            'test': dataset.PangolinDataset(split='test', epoch_size=dataset_cfg.test_size, summarize=False, **dataset_cfg),
-            'predict': dataset.PangolinDataset(split='test', epoch_size=dataset_cfg.predict_size, summarize=False, **dataset_cfg),
+            'train': datasets.PangolinDataset(split='train', epoch_size=dataset_cfg.train_size, summarize=True, **dataset_cfg),
+            'val': datasets.PangolinDataset(split='val', epoch_size=dataset_cfg.val_size, summarize=False, **dataset_cfg),
+            'test': datasets.PangolinDataset(split='test', epoch_size=dataset_cfg.test_size, summarize=False, **dataset_cfg),
+            'predict': datasets.PangolinDataset(split='test', epoch_size=dataset_cfg.predict_size, summarize=False, **dataset_cfg),
         }
     else:
         raise ValueError(f"Unknown dataset type: {dataset_cfg.type}")

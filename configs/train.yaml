@@ -42,7 +42,7 @@ dataloader:
 dataset:
   debug: ${debug}
   type: GeneSplice
-  file_path: rna_sites.pkl
+  file_path: gene_sites.pkl
   train_size: 96000
   val_size: 12800
   test_size: 12800
