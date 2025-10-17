@@ -21,7 +21,9 @@ conda install -c conda-forge pandas numpy condahydra-core omegaconf wandb gputil
 
 We can use them to generate training data instead of repeating all data processing pipelines starting from RNA-seq raw reads.
 
-2. Ideally, one only needs to run one script: create_files.sh in the preprocessing folder. Several genome sequence files and software tools may need to be downloaded or installed.
+2. Install faidx (e.g., from samtools) and wownload the genomes by running "make pangolin_download_genomes"
+
+3. Ideally, one only needs to run one script: create_files.sh in the preprocessing folder. Some additional python pacakges may need to be installed.
 
 ### Spliser processing
 

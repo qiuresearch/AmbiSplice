@@ -26,10 +26,6 @@ install: ## Install dependencies
 	pip install lightning
 	conda install -c conda-forge pandas numpy hydra-core omegaconf wandb gputil matplotlib beartype h5py pytables -y
 
-pangolin_datasets: ## Prepare Pangolin datasets
-	echo "Preparing Pangolin datasets..."
-	# 
-
 pangolin_download_genomes: ## Download Pangolin genomes
 	# Download human and mouse genomes from Gencode (or Ensembl)
 	wget https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_49/GRCh38.primary_assembly.genome.fa.gz
