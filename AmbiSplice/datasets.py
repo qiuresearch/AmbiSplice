@@ -55,9 +55,9 @@ class PangolinDataset(Dataset):
             ilogger.warning("Failed to close HDF5 file in PangolinDataset.")
 
 
-class SeqCropsDataset(Dataset):
+class GeneCropsDataset(Dataset):
     def __init__(self, data, file_path=None, indices=None, num_classes=None, **kwargs):
-        super(SeqCropsDataset, self).__init__()
+        super(GeneCropsDataset, self).__init__()
 
         self.data = data
         if isinstance(self.data, str):
