@@ -11,6 +11,7 @@ BASE_DICT = {'A': [1, 0, 0, 0],
 def onehot_encode_CL(seq): # CL --> return in shape [C, L]
     return np.array([BASE_DICT.get(base.upper(), [0, 0, 0, 0]) for base in seq]).T
 
+
 def decode_one_hot_old(array):
     index_to_base = {tuple([1, 0, 0, 0]): 'A',
                      tuple([0, 1, 0, 0]): 'C',
@@ -33,52 +34,57 @@ def decode_onehot(onehot_vec, dim=0, idx2base=np.array(['A', 'C', 'G', 'T', 'N']
     return ''.join(idx2base[onehot_idx])
 
 
-def sprinkle_sites_onto_vectors(rna_sites, debug=False):
+def reverse_complement(seq):
+    complement = {'A': 'T', 'C': 'G', 'G': 'C', 'T': 'A', 'N': 'N'}
+    return ''.join(complement.get(base, 'N') for base in reversed(seq))
+
+
+def sprinkle_sites_on_sequence(gene_sites, debug=False):
     """ Convert splice site positions and labels into vectors aligned with the RNA sequence """
 
-    rna_seq = rna_sites['seq']
+    seq = gene_sites['seq']
     # classification labels: 0: no site, 1: donor, 2: acceptor, 3: hybrid
-    vec_cls = np.zeros(len(rna_seq), dtype=int)
-    vec_cls_odds = np.zeros(len(rna_seq), dtype=float)
-    vec_cls_mask = np.zeros(len(rna_seq), dtype=int)
+    seq_cls = np.zeros(len(seq), dtype=int)
+    seq_cls_odds = np.zeros(len(seq), dtype=float)
+    seq_cls_mask = np.zeros(len(seq), dtype=int)
     # pos is 0-based, pretty slow way to do this
-    for pos, site_type, site_odds in zip(rna_sites['cls_pos'], rna_sites['cls_type'], rna_sites['cls_odds']):
-        vec_cls_odds[pos] = site_odds
-        vec_cls_mask[pos] = 1
+    for pos, site_type, site_odds in zip(gene_sites['cls_pos'], gene_sites['cls_type'], gene_sites['cls_odds']):
+        seq_cls_odds[pos] = site_odds
+        seq_cls_mask[pos] = 1
         if site_type == 'donor':
-            vec_cls[pos] = 1 # donor
+            seq_cls[pos] = 1 # donor
         elif site_type == 'acceptor':
-            vec_cls[pos] = 2 # acceptor
+            seq_cls[pos] = 2 # acceptor
         elif site_type == 'hybrid':
-            vec_cls[pos] = 3 # hybrid
+            seq_cls[pos] = 3 # hybrid
         else:
             raise ValueError(f"Invalid site type: {site_type}")
 
     # psi values (initialize with zeros!)
-    vec_psi = np.zeros(len(rna_seq), dtype=float)
-    vec_psi_std = np.zeros(len(rna_seq), dtype=float)
-    vec_psi_mask = np.zeros(len(rna_seq), dtype=int)
+    seq_psi = np.zeros(len(seq), dtype=float)
+    seq_psi_std = np.zeros(len(seq), dtype=float)
+    seq_psi_mask = np.zeros(len(seq), dtype=int)
     # pos is 0-based, pretty slow way to do this
-    for pos, psi, psi_std in zip(rna_sites['psi_pos'], rna_sites['psi'], rna_sites['psi_std']):
-        vec_psi[pos] = psi
-        vec_psi_std[pos] = psi_std
-        vec_psi_mask[pos] = 1
+    for pos, psi, psi_std in zip(gene_sites['psi_pos'], gene_sites['psi'], gene_sites['psi_std']):
+        seq_psi[pos] = psi
+        seq_psi_std[pos] = psi_std
+        seq_psi_mask[pos] = 1
 
-    return {'seq': rna_seq,
-            'cls': vec_cls,
-            'cls_odds': vec_cls_odds,
-            'cls_mask': vec_cls_mask,
-            'psi': vec_psi,
-            'psi_std': vec_psi_std,
-            'psi_mask': vec_psi_mask,
+    return {'seq': seq,
+            'cls': seq_cls,
+            'cls_odds': seq_cls_odds,
+            'cls_mask': seq_cls_mask,
+            'psi': seq_psi,
+            'psi_std': seq_psi_std,
+            'psi_mask': seq_psi_mask,
             }
 
 
-def get_train_feats_single_rna(rna_feats, num_crops=None, 
-                               crop_size=5000, flank_size=5000,
-                               min_sites=0, min_usage=0,
-                               debug=False):
-    """ Generate training features for a single RNA transcript by croping the sequence
+def get_crop_feats_single_seq(seq_feat, num_crops=None, 
+                              crop_size=5000, flank_size=5000,
+                              min_sites=0, min_usage=0,
+                              debug=False):
+    """ Generate crop features for a single RNA transcript by croping the sequence
     Args:
         rna_feats: dict, output of sprinkle_sites_onto_vectors
         num_crops: int, number of crops to generate, if None, generate all possible crops
@@ -88,18 +94,18 @@ def get_train_feats_single_rna(rna_feats, num_crops=None,
         min_usage: float, minimum total usage (psi) in the crop to be included
         debug: bool, whether to print debug information
     """
-    rna_seq = rna_feats['seq']
-    rna_cls = rna_feats['cls'].astype(np.int64)
-    rna_cls_odds = rna_feats['cls_odds'].astype(np.float32)
-    rna_cls_mask = rna_feats['cls_mask'].astype(np.int32)
-    rna_psi = rna_feats['psi'].astype(np.float32)
-    rna_psi_std = rna_feats['psi_std'].astype(np.float32)
-    rna_psi_mask = rna_feats['psi_mask'].astype(np.int32)
+    seq = seq_feat['seq']
+    seq_cls = seq_feat['cls'].astype(np.int64)
+    seq_cls_odds = seq_feat['cls_odds'].astype(np.float32)
+    seq_cls_mask = seq_feat['cls_mask'].astype(np.int32)
+    seq_psi = seq_feat['psi'].astype(np.float32)
+    seq_psi_std = seq_feat['psi_std'].astype(np.float32)
+    seq_psi_mask = seq_feat['psi_mask'].astype(np.int32)
 
     total_size = crop_size + 2 * flank_size
 
-    # divide gene_lsv into crops of crop_size 
-    seq_len = len(rna_seq)
+    # divide gene_list into crops of crop_size
+    seq_len = len(seq)
     crop_starts = np.arange(0, seq_len, crop_size, dtype=np.int32)
     crop_starts[-1] = max([0, seq_len - crop_size])  # ensure last crop reaches the end
 
@@ -115,10 +121,10 @@ def get_train_feats_single_rna(rna_feats, num_crops=None,
         crop_starts = crop_starts[selected_indices]
         crop_ends = crop_ends[selected_indices]
         
-    train_feats = []
+    crop_feats = []
     for crop_start, crop_end in zip(crop_starts, crop_ends):
         # crop_end - crop_start <= crop_size always (< if gene is shorter than crop_size)
-        train_feat = {'crop_start': crop_start, 'crop_end': crop_end}
+        crop_feat = {'crop_start': crop_start, 'crop_end': crop_end}
 
         # seq_start and seq_end include flanking regions
         seq_start = max(0, crop_start - flank_size)
@@ -129,24 +135,24 @@ def get_train_feats_single_rna(rna_feats, num_crops=None,
         right_pad = pad_size - left_pad
         
         # pad with 'N's if needed for input X
-        train_feat['seq'] = 'N' * left_pad + rna_seq[seq_start:seq_end] + 'N' * right_pad
-        train_feat['seq_onehot'] = onehot_encode_CL(train_feat['seq']).astype(np.float32)  # shape [4, total_size]
+        crop_feat['seq'] = 'N' * left_pad + seq[seq_start:seq_end] + 'N' * right_pad
+        crop_feat['seq_onehot'] = onehot_encode_CL(crop_feat['seq']).astype(np.float32)  # shape [4, total_size]
 
-        train_feat['cls'] = np.pad(rna_cls[seq_start:seq_end], (left_pad, right_pad), 'constant')
-        train_feat['cls_odds'] = np.pad(rna_cls_odds[seq_start:seq_end], (left_pad, right_pad), 'constant')
-        train_feat['cls_mask'] = np.pad(rna_cls_mask[seq_start:seq_end], (left_pad, right_pad), 'constant')
-        
-        train_feat['psi'] = np.pad(rna_psi[seq_start:seq_end], (left_pad, right_pad), 'constant')
-        train_feat['psi_std'] = np.pad(rna_psi_std[seq_start:seq_end], (left_pad, right_pad), 'constant')
-        train_feat['psi_mask'] = np.pad(rna_psi_mask[seq_start:seq_end], (left_pad, right_pad), 'constant')
+        crop_feat['cls'] = np.pad(seq_cls[seq_start:seq_end], (left_pad, right_pad), mode='constant', constant_values=0)
+        crop_feat['cls_odds'] = np.pad(seq_cls_odds[seq_start:seq_end], (left_pad, right_pad), mode='constant', constant_values=0.)
+        crop_feat['cls_mask'] = np.pad(seq_cls_mask[seq_start:seq_end], (left_pad, right_pad), mode='constant', constant_values=-100)
+
+        crop_feat['psi'] = np.pad(seq_psi[seq_start:seq_end], (left_pad, right_pad), mode='constant', constant_values=0.)
+        crop_feat['psi_std'] = np.pad(seq_psi_std[seq_start:seq_end], (left_pad, right_pad), mode='constant', constant_values=0.)
+        crop_feat['psi_mask'] = np.pad(seq_psi_mask[seq_start:seq_end], (left_pad, right_pad), mode='constant', constant_values=-100)
 
         # target Y only has the middle crop_size region excluding flanks
-        train_feat['cls'] = train_feat['cls'][flank_size:flank_size + crop_size]
-        train_feat['cls_odds'] = train_feat['cls_odds'][flank_size:flank_size + crop_size]
-        train_feat['cls_mask'] = train_feat['cls_mask'][flank_size:flank_size + crop_size] # not used currently
-        train_feat['psi'] = train_feat['psi'][flank_size:flank_size + crop_size]
-        train_feat['psi_std'] = train_feat['psi_std'][flank_size:flank_size + crop_size]
-        train_feat['psi_mask'] = train_feat['psi_mask'][flank_size:flank_size + crop_size] # not used currently
+        crop_feat['cls'] = crop_feat['cls'][flank_size:flank_size + crop_size]
+        crop_feat['cls_odds'] = crop_feat['cls_odds'][flank_size:flank_size + crop_size]
+        crop_feat['cls_mask'] = crop_feat['cls_mask'][flank_size:flank_size + crop_size] # not used currently
+        crop_feat['psi'] = crop_feat['psi'][flank_size:flank_size + crop_size]
+        crop_feat['psi_std'] = crop_feat['psi_std'][flank_size:flank_size + crop_size]
+        crop_feat['psi_mask'] = crop_feat['psi_mask'][flank_size:flank_size + crop_size] # not used currently
 
         # parts of Y labels may be padding if the entire sequence is shorter than crop_size
         # train_feat['crop_mask'] = np.zeros(crop_size, dtype=np.int32)
@@ -155,17 +161,17 @@ def get_train_feats_single_rna(rna_feats, num_crops=None,
         # y_end = y_start + (crop_end - crop_start)
         # train_feat['crop_mask'][y_start:y_end] = 1
 
-        if min_sites and np.sum(train_feat['cls'][:crop_end-crop_start]) <= min_sites:
+        if min_sites and np.sum(crop_feat['cls'][:crop_end-crop_start]) <= min_sites:
             # print(f"Skipping gene_id: {train_feat['gene_id']}; start: {train_feat['start']}; end: {train_feat['end']} with <= {min_sites} splice sites!")
             continue
 
-        if min_usage and np.sum(train_feat['psi'][:crop_end-crop_start]) < min_usage:
+        if min_usage and np.sum(crop_feat['psi'][:crop_end-crop_start]) < min_usage:
             # print(f"Skipping gene_id: {train_feat['gene_id']}; start: {train_feat['start']}; end: {train_feat['end']} with <= {min_usage} usage!")
             continue
 
-        train_feats.append(train_feat)
+        crop_feats.append(crop_feat)
 
-    return train_feats
+    return crop_feats
 
 
 def make_blocks_no_Pad(start, end, chrom, genome, PADDING=5000, BLOCK_SIZE = 15000):
@@ -271,6 +277,3 @@ def assign_labels(block_start, block_end, psi_dict, PADDING=5000, BLOCK_SIZE = 1
     return labels.T  # Return Full
 
 
-def reverse_complement(seq):
-    complement = {'A': 'T', 'C': 'G', 'G': 'C', 'T': 'A', 'N': 'N'}
-    return ''.join(complement.get(base, 'N') for base in reversed(seq))

@@ -17,6 +17,23 @@ ensemble: # only used for prediction or evaluation/test
     seed: null
     resume_from_ckpt:
       - null
+dataset:
+  debug: ${debug}
+  stage: ${stage}
+  type: null  # Pangolin, GeneSites, SeqCrops
+  train_path: null
+  val_path: null
+  test_path: null
+  predict_path: null
+  split_seed: 111
+  train_size: 96000
+  val_size: 12800
+  test_size: 12800
+  predict_size: null
+  stratified_sampling: chrom # below only applies when type in [GeneSites]
+  weighted_sampling: len
+  dynamic_weights: false
+  enable_cache: false
 model:
   debug: ${debug}
   type: SpliceSingle
@@ -36,24 +53,7 @@ dataloader:
   test_shuffle: false
   predict_shuffle: false
   num_workers: 4
-  prefetch_factor: 2
-dataset:
-  debug: ${debug}
-  stage: ${stage}
-  type: SeqCrops  # Pangolin, GeneSites, SeqCrops
-  train_path: data/gwsplice_seq_crops.pkl
-  val_path: null
-  test_path: null
-  predict_path: null
-  split_seed: 111
-  train_size: 96000
-  val_size: 12800
-  test_size: 12800
-  predict_size: null
-  stratified_sampling: chrom
-  weighted_sampling: len
-  dynamic_weights: false
-  enable_cache: false
+  prefetch_factor: 7
 litrun:
   debug: ${debug}
   seed: 123

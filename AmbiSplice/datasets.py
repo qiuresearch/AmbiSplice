@@ -49,8 +49,10 @@ class PangolinDataset(Dataset):
         return len(self.data) // 3
     
     def __del__(self):
-        if self.data is not None and self.data.isopen:
+        try:
             self.data.close()
+        except:
+            ilogger.warning("Failed to close HDF5 file in PangolinDataset.")
 
 
 class SeqCropsDataset(Dataset):
@@ -89,11 +91,11 @@ class SeqCropsDataset(Dataset):
                 raise IndexError(f"Index:{idx} out of bounds for SeqCropsDataset (len(indices): {len(self.indices)}).")
             idx = self.indices[idx]
         
-        if idx < 0 or idx >= len(self.data.root.train_feats):
-            raise IndexError(f"Index:{idx} out of bounds for SeqCropsDataset (len(data): {len(self.data.root.train_feats)}).")
+        if idx < 0 or idx >= len(self.data.root.crop_feats):
+            raise IndexError(f"Index:{idx} out of bounds for SeqCropsDataset (len(data): {len(self.data.root.crop_feats)}).")
 
-        crop_feat = self.data.root.train_feats[idx]
-        sample_feats = {
+        crop_feat = self.data.root.crop_feats[idx]
+        sample_feat = {
             'seq': crop_feat['seq'], # .decode(),
             'seq_onehot': crop_feat['seq_onehot'],
             'cls': crop_feat['cls'] if self.num_classes is None else np.minimum(crop_feat['cls'], self.num_classes - 1),
@@ -104,7 +106,9 @@ class SeqCropsDataset(Dataset):
             'strand': crop_feat['strand'].decode(),
         }
 
-        return sample_feats
+        sample_feat['cls'] = sample_feat['cls'].astype(np.int64)
+
+        return sample_feat
 
     def __len__(self):
         if self.indices is not None:
@@ -113,8 +117,10 @@ class SeqCropsDataset(Dataset):
             return len(self.data.root.train_feats)
     
     def __del__(self):
-        if self.data is not None and self.data.isopen:
+        try:
             self.data.close()
+        except:
+            ilogger.warning("Failed to close HDF5 file in SeqCropsDataset.")
 
 
 class GeneSitesDataset(Dataset):
@@ -239,11 +245,11 @@ class GeneSitesDataset(Dataset):
         if idx < 0 or idx >= self.epoch_size:
             raise IndexError(f"Index:{idx} out of bounds for SpliceDataset (epoch_size: {self.epoch_size}).")
 
-        sample_feats = None
-        while sample_feats is None:
-            sample_feats = self.omni_sampler(idx)
+        sample_feat = None
+        while sample_feat is None:
+            sample_feat = self.omni_sampler(idx)
             
-        return sample_feats
+        return sample_feat
 
     def get_normalized_sampling_weights(self):
         """ Get normalized sampling weights for stratified or all indices """
@@ -291,28 +297,28 @@ class GeneSitesDataset(Dataset):
 
         # check cache_feats if idx exists
         if self.enable_cache and idx in self.cache_feats and len(self.cache_feats[idx]):
-            sample_feats = self.cache_feats[idx].pop(-1)
+            sample_feat = self.cache_feats[idx].pop(-1)
         else:
             gene_ds = self.meta_df.iloc[idx]
-            gene_feats = splice_feats.sprinkle_sites_onto_vectors(
+            gene_feat = splice_feats.sprinkle_sites_on_sequence(
                 gene_ds, 
                 # training=self.training,
                 )
-            gene_feats = splice_feats.get_train_feats_single_rna(
-                gene_feats,
+            crop_feats = splice_feats.get_crop_feats_single_seq(
+                gene_feat,
                 num_crops=11 if self.enable_cache else 1,
                 crop_size=5000,
                 flank_size=5000,
                 min_sites=0,
                 min_usage=0,
                 )
-            if self.enable_cache and len(gene_feats) > 1:
-                self.cache_feats[idx] = gene_feats
-                sample_feats = self.cache_feats[idx].pop(-1)
+            if self.enable_cache and len(crop_feats) > 1:
+                self.cache_feats[idx] = crop_feats
+                sample_feat = self.cache_feats[idx].pop(-1)
             else:
-                sample_feats = gene_feats[0]
+                sample_feat = crop_feats[0]
         
-        if sample_feats is None:
+        if sample_feat is None:
             if self.weighted_sampling and self.dynamic_weights:
                 self.meta_df.iloc[idx, self.iweight] = 0.0
             ilogger.warning(f"Warning: Sample features for index {idx} are None, skipping.")
@@ -330,5 +336,5 @@ class GeneSitesDataset(Dataset):
             # if sample_feats['input_feats']['ss'].sum() < 7:
             #     return None
                 
-        return sample_feats
+        return sample_feat
     

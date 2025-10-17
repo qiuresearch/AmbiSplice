@@ -432,12 +432,20 @@ class OmniRunModule(LightningModule):
         return super().on_validation_epoch_start()
 
     def validation_step(self, batch_feats, batch_idx=None):
-        
+        if self._validation_steps == 0 and not self.is_child_process:
+            summarize_tensors(batch_feats, prefix='Validation Step Input')
+
         preds = self.model(batch_feats)
+
+        if self._validation_steps == 0 and not self.is_child_process:
+            summarize_tensors(preds, prefix='Validation Step Output')
 
         loss, loss_items = self.model.calc_loss(preds, batch_feats)
         loss_items.update(self.model.calc_metric(preds, batch_feats))
 
+        if self._validation_steps == 0 and not self.is_child_process:
+            summarize_tensors(loss_items, prefix='Validation Loss Items')
+            
         self.log("val/loss", loss, prog_bar=True)
         self.validation_epoch_metrics.append(loss_items)
         self._validation_steps += 1

@@ -39,7 +39,7 @@ pangolin_eval: ## Evaluate Pangolin model
 	conda run --no-capture-output --name $(CONDA_ENV_NAME) python -u run_ambisplice.py stage=eval \
 	    save_prefix=Pangolin_model_test \
 	    dataset.type=Pangolin \
-		dataset.file_path=$(HOME)/github/Pangolin_train/preprocessing/dataset_train_all.h5 \
+		dataset.predict_path=$(HOME)/github/Pangolin_train/preprocessing/dataset_train_all.h5 \
 		model.type=Pangolin \
 		model.state_dict_path=$(HOME)/github/Pangolin/pangolin/models/final.1.0.3.v2 \
 		litrun.resume_from_ckpt=null \
@@ -50,7 +50,7 @@ pangolin_ensemble_eval: ## Evaluate Pangolin ensemble average
 	conda run --no-capture-output --name $(CONDA_ENV_NAME) python -u run_ambisplice.py stage=eval \
 	    save_prefix=Pangolin_ens_test \
 	    dataset.type=Pangolin \
-		dataset.file_path=$(HOME)/github/Pangolin_train/preprocessing/dataset_train_all.h5 \
+		dataset.predict_path=$(HOME)/github/Pangolin_train/preprocessing/dataset_train_all.h5 \
 		model.type=Pangolin \
 		model.state_dict_path=null \
 		ensemble.enable=true \
@@ -70,17 +70,16 @@ pangolin_train_single: ## Train Pangolin model
 test_pangolin_dataset: ## Test on Pangolin dataset
 	conda run --no-capture-output --name $(CONDA_ENV_NAME) python -u run_ambisplice.py stage=test \
 		dataset.type=pangolin \
-		dataset.file_path=$(HOME)/github/Pangolin_train/preprocessing/dataset_train_all.h5
+		dataset.predict_path=$(HOME)/github/Pangolin_train/preprocessing/dataset_train_all.h5
 
 test_human: ## Test on Human dataset
 	conda run --no-capture-output --name $(CONDA_ENV_NAME) python -u run_ambisplice.py stage=test \
 		dataset.type=ambisplice \
-		dataset.file_path=$(HOME)/bench/AmbiSplice/data/ambisplice_test.h5
+		dataset.predict_path=$(HOME)/bench/AmbiSplice/data/ambisplice_test.h5
 
-train_gwsplice_single: ## Train on Human Heart dataset
+train_seqcrops_splicesingle: ## Train SpliceSingle on sequence crops
 	conda run --no-capture-output --name $(CONDA_ENV_NAME) python -u run_ambisplice.py stage=train \
-		dataset.type=gwsplice \
-		dataset.file_path=data/gwsplice_feats_labels.pkl \
-		litrun.max_epochs=10 \
-		model.type=GWSplice \
-		litrun.resume_from_ckpt=null \ # checkpoints/PangolinSingle_2025-10-07_06-49-35_eny45xtr/epoch=095-step=096000.ckpt
+		dataset.type=seqcrops \
+		dataset.train_path=data/gwsplice_seq_crops.h5 \
+		model.type=SpliceSingle \
+		litrun.resume_from_ckpt=null debug=true

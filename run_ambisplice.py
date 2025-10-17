@@ -1,8 +1,8 @@
 import os
+import tables
 import datetime
 import numpy as np
 import pandas as pd
-
 import hydra
 import GPUtil
 import omegaconf
@@ -76,8 +76,11 @@ def get_torch_model(model_cfg: omegaconf.DictConfig):
 def get_datasets(dataset_cfg: omegaconf.DictConfig):
     """ Prepare training, validation, and prediction datasets."""
 
+    train_set, val_set, test_set, predict_set = None, None, None, None
+    assert dataset_cfg.test_path is None, "test_path is not used in this script, please use predict_path instead!"
+
     if dataset_cfg.type.upper() == 'GeneSites'.upper():
-        meta_df_path = dataset_cfg.file_path
+        meta_df_path = dataset_cfg.train_path
         ilogger.info(f"Loading metadata from {meta_df_path}")
         meta_df = pd.read_pickle(meta_df_path)
 
@@ -111,22 +114,44 @@ def get_datasets(dataset_cfg: omegaconf.DictConfig):
         print(f"Validation set size: {len(val_df)}")
         print(f"Test set size: {len(test_df)}")
 
-        all_datasets = {
-            'train': datasets.GeneSitesDataset(train_df, epoch_size=dataset_cfg.train_size, summarize=True, **dataset_cfg),
-            'val': datasets.GeneSitesDataset(val_df, epoch_size=dataset_cfg.val_size, summarize=False, **dataset_cfg),
-            'test': datasets.GeneSitesDataset(test_df, epoch_size=dataset_cfg.test_size, summarize=False, **dataset_cfg),
-            'predict': datasets.GeneSitesDataset(test_df, epoch_size=dataset_cfg.predict_size, summarize=False, **dataset_cfg),
-        }
+        train_set = datasets.GeneSitesDataset(train_df, epoch_size=dataset_cfg.train_size, summarize=True, **dataset_cfg)
+        val_set = datasets.GeneSitesDataset(val_df, epoch_size=dataset_cfg.val_size, summarize=False, **dataset_cfg)
+        # test_set = datasets.GeneSitesDataset(test_df, epoch_size=dataset_cfg.test_size, summarize=False, **dataset_cfg)
+        predict_set = datasets.GeneSitesDataset(test_df, epoch_size=dataset_cfg.predict_size, summarize=False, **dataset_cfg)
     elif dataset_cfg.type.upper() == 'SeqCrops'.upper():
-        all_datasets = {
-            'train': datasets.SeqCropsDataset(split='train', epoch_size=dataset_cfg.train_size, summarize=True, **dataset_cfg),
-            'val': datasets.SeqCropsDataset(split='val', epoch_size=dataset_cfg.val_size, summarize=False, **dataset_cfg),
-            'test': datasets.SeqCropsDataset(split='test', epoch_size=dataset_cfg.test_size, summarize=False, **dataset_cfg),
-            'predict': datasets.SeqCropsDataset(split='test', epoch_size=dataset_cfg.predict_size, summarize=False, **dataset_cfg),
-        }
-    elif dataset_cfg.type.upper() == 'Pangolin'.upper():
+        train_data, train_indices, val_indices = None, None, None
 
-        train_set, val_set, test_set, predict_set = None, None, None, None # test_set is not really used anywhere
+        if dataset_cfg.train_path:
+            train_data = tables.open_file(dataset_cfg.train_path, mode='r')
+            train_size = train_data.root.crop_feats.shape[0]
+            ilogger.info(f"Train dataset contains {train_size} samples.")
+        elif dataset_cfg.stage.lower().startswith('train'):
+            raise ValueError("Training stage requires train_path to be specified in dataset config!")
+
+        if dataset_cfg.val_path:
+            val_set = datasets.SeqCropsDataset(dataset_cfg.val_path, file_path=None, epoch_size=dataset_cfg.val_size, summarize=False, **dataset_cfg)
+        elif dataset_cfg.stage.lower().startswith('train') and train_data is not None:
+            train_split_size = int(0.9 * train_size)
+            all_indices = np.arange(train_size)
+            np.random.seed(dataset_cfg.split_seed if 'split_seed' in dataset_cfg else 111)
+            np.random.shuffle(all_indices)
+            train_indices = all_indices[:train_split_size]
+            val_indices = all_indices[train_split_size:]
+            ilogger.info(f"Split training set into train ({len(train_indices)}) and val ({len(val_indices)}) subsets.")
+
+            val_set = datasets.SeqCropsDataset(train_data, indices=val_indices, file_path=dataset_cfg.train_path, epoch_size=dataset_cfg.val_size, summarize=False, **dataset_cfg)
+        elif dataset_cfg.stage.lower().startswith('train'):
+            ilogger.warning("No validation dataset used for training!!!")
+            
+        if train_data is not None:
+            train_set = datasets.SeqCropsDataset(train_data, indices=train_indices, file_path=dataset_cfg.train_path, epoch_size=dataset_cfg.train_size, summarize=True, **dataset_cfg)
+
+        if dataset_cfg.predict_path:
+            predict_set = datasets.SeqCropsDataset(dataset_cfg.predict_path, file_path=None, epoch_size=dataset_cfg.predict_size, summarize=False, **dataset_cfg)
+        elif dataset_cfg.stage.lower().startswith(('eval', 'predict')):
+            raise ValueError(f"{dataset_cfg.stage} stage requires predict_path to be specified in dataset config!")
+
+    elif dataset_cfg.type.upper() == 'Pangolin'.upper():
 
         if dataset_cfg.train_path:
             train_set = datasets.PangolinDataset(file_path=dataset_cfg.train_path, epoch_size=dataset_cfg.train_size, summarize=True, **dataset_cfg)
@@ -142,16 +167,16 @@ def get_datasets(dataset_cfg: omegaconf.DictConfig):
             ilogger.info(f"Split training set into train ({len(train_set)}) and val ({len(val_set)}) subsets.")
         elif dataset_cfg.stage.lower().startswith('train'):
             ilogger.warning("No validation dataset used for training!!!")
+
         if dataset_cfg.predict_path:
             predict_set = datasets.PangolinDataset(file_path=dataset_cfg.predict_path, epoch_size=dataset_cfg.predict_size, summarize=False, **dataset_cfg)
         elif dataset_cfg.stage.lower().startswith(('eval', 'predict')):
             raise ValueError(f"{dataset_cfg.stage} stage requires predict_path to be specified in dataset config!")
 
-        all_datasets = {'train': train_set, 'val': val_set, 'test': test_set, 'predict': predict_set}
     else:
         raise ValueError(f"Unknown dataset type: {dataset_cfg.type}")
 
-    return all_datasets
+    return {'train': train_set, 'val': val_set, 'test': test_set, 'predict': predict_set}
 
 
 def get_litdata(datasets, dataloader_cfg: omegaconf.DictConfig):
