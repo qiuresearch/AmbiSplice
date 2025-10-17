@@ -13,6 +13,7 @@ ilogger = utils.get_pylogger(__name__)
 
 
 class PangolinDataset(Dataset):
+    """ Adapted from Pangolin github repo """
     def __init__(self, file_path, **kwargs):
         super(PangolinDataset, self).__init__()
         self.file_path = file_path
@@ -48,7 +49,7 @@ class PangolinDataset(Dataset):
         return len(self.data) // 3
     
     def __del__(self):
-        if hasattr(self, 'data') and self.data is not None:
+        if self.data is not None and self.data.isopen:
             self.data.close()
 
 
@@ -112,7 +113,7 @@ class SeqCropsDataset(Dataset):
             return len(self.data.root.train_feats)
     
     def __del__(self):
-        if hasattr(self, 'data') and self.data is not None:
+        if self.data is not None and self.data.isopen:
             self.data.close()
 
 

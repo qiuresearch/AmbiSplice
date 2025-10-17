@@ -58,15 +58,14 @@ pangolin_ensemble_eval: ## Evaluate Pangolin ensemble average
 		ensemble.model.state_dict_path=[$(HOME)/github/Pangolin/pangolin/models/final.1.0.3.v2,$(HOME)/github/Pangolin/pangolin/models/final.2.0.3.v2,$(HOME)/github/Pangolin/pangolin/models/final.3.0.3.v2] \
 		litrun.resume_from_ckpt=null
 
-
 pangolin_train_single: ## Train Pangolin model
 	# Run Pangolin model (final.modelnum.tissue.epoch) on Pangolin dataset
 	conda run --no-capture-output --name $(CONDA_ENV_NAME) python -u run_ambisplice.py stage=train \
 	    dataset.type=Pangolin \
-		dataset.file_path=$(HOME)/github/Pangolin_train/preprocessing/dataset_train_all.h5 \
-		model.type=Pangolin \
-		model.state_dict_path=$(HOME)/github/Pangolin/pangolin/models/final.1.0.3.v2 \
-		litrun.resume_from_ckpt=null
+		dataset.train_path=data/pangolin/dataset_train_all.h5 \
+		model.type=PangolinSingle \
+		model.state_dict_path=null \
+		litrun.resume_from_ckpt=null debug=true
 
 test_pangolin_dataset: ## Test on Pangolin dataset
 	conda run --no-capture-output --name $(CONDA_ENV_NAME) python -u run_ambisplice.py stage=test \

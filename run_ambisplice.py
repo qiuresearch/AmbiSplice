@@ -126,12 +126,28 @@ def get_datasets(dataset_cfg: omegaconf.DictConfig):
         }
     elif dataset_cfg.type.upper() == 'Pangolin'.upper():
 
-        all_datasets = {
-            'train': datasets.PangolinDataset(file_path=dataset_cfg.train_path, epoch_size=dataset_cfg.train_size, summarize=True, **dataset_cfg),
-            'val': datasets.PangolinDataset(file_path=dataset_cfg.val_path, epoch_size=dataset_cfg.val_size, summarize=False, **dataset_cfg),
-            'test': datasets.PangolinDataset(file_path=dataset_cfg.test_path, epoch_size=dataset_cfg.test_size, summarize=False, **dataset_cfg),
-            'predict': datasets.PangolinDataset(file_path=dataset_cfg.predict_path, epoch_size=dataset_cfg.predict_size, summarize=False, **dataset_cfg),
-        }
+        train_set, val_set, test_set, predict_set = None, None, None, None # test_set is not really used anywhere
+
+        if dataset_cfg.train_path:
+            train_set = datasets.PangolinDataset(file_path=dataset_cfg.train_path, epoch_size=dataset_cfg.train_size, summarize=True, **dataset_cfg)
+        elif dataset_cfg.stage.lower().startswith('train'):
+            raise ValueError("Training stage requires train_path to be specified in dataset config!")
+
+        if dataset_cfg.val_path:
+            val_set = datasets.PangolinDataset(file_path=dataset_cfg.val_path, epoch_size=dataset_cfg.val_size, summarize=False, **dataset_cfg)
+        elif dataset_cfg.stage.lower().startswith('train') and train_set is not None:
+            train_split_size = int(0.9 * len(train_set))
+            train_set, val_set = torch.utils.data.random_split(train_set, [train_split_size, len(train_set) - train_split_size],
+                        generator=torch.Generator().manual_seed(dataset_cfg.split_seed if 'split_seed' in dataset_cfg else 42))
+            ilogger.info(f"Split training set into train ({len(train_set)}) and val ({len(val_set)}) subsets.")
+        elif dataset_cfg.stage.lower().startswith('train'):
+            ilogger.warning("No validation dataset used for training!!!")
+        if dataset_cfg.predict_path:
+            predict_set = datasets.PangolinDataset(file_path=dataset_cfg.predict_path, epoch_size=dataset_cfg.predict_size, summarize=False, **dataset_cfg)
+        elif dataset_cfg.stage.lower().startswith(('eval', 'predict')):
+            raise ValueError(f"{dataset_cfg.stage} stage requires predict_path to be specified in dataset config!")
+
+        all_datasets = {'train': train_set, 'val': val_set, 'test': test_set, 'predict': predict_set}
     else:
         raise ValueError(f"Unknown dataset type: {dataset_cfg.type}")
 

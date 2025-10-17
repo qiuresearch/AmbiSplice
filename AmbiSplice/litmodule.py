@@ -638,7 +638,7 @@ class OmniRunModule(LightningModule):
             use_distributed_sampler=False,
             enable_progress_bar=True,
             enable_model_summary=True,
-            acccelerator=accelerator,
+            accelerator=accelerator,
             devices=devices,
         )
         # strategy="ddp_find_unused_parameters_false" if len(devices) > 1 else None,

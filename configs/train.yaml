@@ -45,6 +45,7 @@ dataset:
   val_path: null
   test_path: null
   predict_path: null
+  split_seed: 111
   train_size: 96000
   val_size: 12800
   test_size: 12800
