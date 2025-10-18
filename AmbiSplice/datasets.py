@@ -82,7 +82,7 @@ class GeneCropsDataset(Dataset):
     def __getitem__(self, idx):
         self.iterations += 1
 
-        if self.iterations % 100000 == -1 and os.path.exists(self.file_path): # workaround to avoid memory issues
+        if self.iterations % 10000 == -1 and os.path.exists(self.file_path): # workaround to avoid memory issues
             self.data.close()
             self.data = tables.open_file(self.file_path, mode='r')
 
@@ -114,7 +114,7 @@ class GeneCropsDataset(Dataset):
         if self.indices is not None:
             return len(self.indices)
         else:
-            return len(self.data.root.train_feats)
+            return len(self.data.root.crop_feats)
     
     def __del__(self):
         try:

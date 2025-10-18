@@ -119,33 +119,32 @@ def get_datasets(dataset_cfg: omegaconf.DictConfig):
         # test_set = datasets.GeneSitesDataset(test_df, epoch_size=dataset_cfg.test_size, summarize=False, **dataset_cfg)
         predict_set = datasets.GeneSitesDataset(test_df, epoch_size=dataset_cfg.predict_size, summarize=False, **dataset_cfg)
     elif dataset_cfg.type.upper() == 'GeneCrops'.upper():
-        train_data, train_indices, val_indices = None, None, None
+        train_indices, val_indices = None, None
 
         if dataset_cfg.train_path:
-            train_data = tables.open_file(dataset_cfg.train_path, mode='r')
-            train_size = train_data.root.crop_feats.shape[0]
-            ilogger.info(f"Train dataset contains {train_size} samples.")
+            train_set = datasets.GeneCropsDataset(dataset_cfg.train_path, file_path=dataset_cfg.train_path, epoch_size=dataset_cfg.train_size, summarize=True, **dataset_cfg)
         elif dataset_cfg.stage.lower().startswith('train'):
             raise ValueError("Training stage requires train_path to be specified in dataset config!")
 
         if dataset_cfg.val_path:
             val_set = datasets.GeneCropsDataset(dataset_cfg.val_path, file_path=None, epoch_size=dataset_cfg.val_size, summarize=False, **dataset_cfg)
-        elif dataset_cfg.stage.lower().startswith('train') and train_data is not None:
-            train_split_size = int(0.9 * train_size)
-            all_indices = np.arange(train_size)
+        elif dataset_cfg.stage.lower().startswith('train') and train_set is not None:
+            # Create validation set from training set
+            # The easiest is to use torch.utils.data.random_split. 
+            # Here we can think about doing stratified splitting, etc. later.
+            all_indices = np.arange(len(train_set))
+            train_split_size = int(0.9 * len(train_set))
             np.random.seed(dataset_cfg.split_seed if 'split_seed' in dataset_cfg else 111)
             np.random.shuffle(all_indices)
             train_indices = all_indices[:train_split_size]
             val_indices = all_indices[train_split_size:]
             ilogger.info(f"Split training set into train ({len(train_indices)}) and val ({len(val_indices)}) subsets.")
 
-            val_set = datasets.GeneCropsDataset(train_data, indices=val_indices, file_path=dataset_cfg.train_path, epoch_size=dataset_cfg.val_size, summarize=False, **dataset_cfg)
+            val_set = torch.utils.data.Subset(train_set, val_indices)
+            train_set = torch.utils.data.Subset(train_set, train_indices)
         elif dataset_cfg.stage.lower().startswith('train'):
             ilogger.warning("No validation dataset used for training!!!")
             
-        if train_data is not None:
-            train_set = datasets.GeneCropsDataset(train_data, indices=train_indices, file_path=dataset_cfg.train_path, epoch_size=dataset_cfg.train_size, summarize=True, **dataset_cfg)
-
         if dataset_cfg.predict_path:
             predict_set = datasets.GeneCropsDataset(dataset_cfg.predict_path, file_path=None, epoch_size=dataset_cfg.predict_size, summarize=False, **dataset_cfg)
         elif dataset_cfg.stage.lower().startswith(('eval', 'predict')):

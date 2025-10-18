@@ -394,12 +394,12 @@ class OmniRunModule(LightningModule):
 
         preds = self.model(batch_feats)
         if self._train_steps == 0 and not self.is_child_process:
-            summarize_tensors(preds, prefix='Training Predictions')
+            summarize_tensors(preds, prefix='Training Step Forward')
 
         loss, loss_items = self.model.calc_loss(preds, batch_feats)
         loss_items.update(self.model.calc_metric(preds, batch_feats))
         if self._train_steps == 0 and not self.is_child_process:
-            summarize_tensors(loss_items, prefix='Training Loss Items')
+            summarize_tensors(loss_items, prefix='Training Step Metrics')
         
         self.log("train/loss", loss, prog_bar=True)
         self.train_epoch_metrics.append(loss_items)
@@ -444,14 +444,14 @@ class OmniRunModule(LightningModule):
         preds = self.model(batch_feats)
 
         if self._validation_steps == 0 and not self.is_child_process:
-            summarize_tensors(preds, prefix='Validation Step Output')
+            summarize_tensors(preds, prefix='Validation Step Forward')
 
         loss, loss_items = self.model.calc_loss(preds, batch_feats)
         loss_items.update(self.model.calc_metric(preds, batch_feats))
 
         if self._validation_steps == 0 and not self.is_child_process:
-            summarize_tensors(loss_items, prefix='Validation Loss Items')
-            
+            summarize_tensors(loss_items, prefix='Validation Step Metrics')
+
         self.log("val/loss", loss, prog_bar=True)
         self.validation_epoch_metrics.append(loss_items)
         self._validation_steps += 1
@@ -545,7 +545,7 @@ class OmniRunModule(LightningModule):
         if loss_items:
             self.predict_epoch_metrics.append(loss_items)
             if self._predict_steps == 0:
-                summarize_tensors(loss_items, prefix='Predict Loss Items')
+                summarize_tensors(loss_items, prefix='Predict Step Metrics')
 
         self._predict_steps += 1
         return (batch_feats, pred_labels)
