@@ -7,6 +7,7 @@ from omegaconf import DictConfig, OmegaConf
 import socket
 import wandb
 
+import gc
 import torch
 from torch.utils.data import DataLoader
 from pytorch_lightning import Callback
@@ -403,6 +404,11 @@ class OmniRunModule(LightningModule):
         self.log("train/loss", loss, prog_bar=True)
         self.train_epoch_metrics.append(loss_items)
         self._train_steps += 1
+
+        if self._train_steps % 1000 == 0:
+            torch.cuda.empty_cache()
+            gc.collect()
+
         return loss
     
     def on_train_epoch_end(self):

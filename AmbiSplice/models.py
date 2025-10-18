@@ -77,7 +77,7 @@ class SpliceBaseModule(nn.Module):
         loss_items['loss'] = loss
 
         for k in loss_items: # do not move to cpu here, let the caller do it
-            loss_items[k] = loss_items[k].detach() 
+            loss_items[k] = loss_items[k].detach().cpu()
 
         return loss, loss_items
 
@@ -112,6 +112,9 @@ class SpliceBaseModule(nn.Module):
         # compute mse for psi
         psi_pred = torch.sigmoid(preds['psi_logits'])  # (B, crop_size)
         metric_items['psi_mse'] = F.mse_loss(psi_pred, labels['psi'], reduction='mean')
+
+        for k in metric_items: # do not move to cpu here, let the caller do it
+            metric_items[k] = metric_items[k].detach().cpu()
 
         return metric_items
 
