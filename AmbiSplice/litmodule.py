@@ -586,7 +586,8 @@ class OmniRunModule(LightningModule):
             save_dir = os.path.join(ckpt_home, f'debug_{date_string}')
             checkpoints_cfg['dirpath'] = save_dir
         else:
-            cfg.wandb.name = f'{torch_model.__class__.__name__}_{date_string}'
+            # cfg.wandb.name = f'{torch_model.__class__.__name__}_{date_string}'
+            cfg.wandb.name = f'{cfg.wandb.name}_{date_string}'
             wandb_logger = WandbLogger(**cfg.wandb)
             ilogger.info(f"Wandb logger initialized with name: {wandb_logger.experiment.name}, id: {wandb_logger.experiment.id}")
 

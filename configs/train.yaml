@@ -6,8 +6,8 @@ gpus: [0]
 accelerator: gpu
 project: GWSplice
 save_prefix: dummy
-save_individual: false # only used for prediction or evaluation/test
-ensemble: # only used for prediction or evaluation/test
+save_individual: false # used for eval/test/predict only
+ensemble: # used for eval/test/predict only
   enable: false
   model:
     type: [null]
@@ -26,11 +26,11 @@ dataset:
   test_path: null
   predict_path: null
   split_seed: 111
-  train_size: 96000
-  val_size: 12800
-  test_size: 12800
+  train_size: null
+  val_size: null
+  test_size: null
   predict_size: null
-  stratified_sampling: chrom # below only applies when type in [GeneSites]
+  stratified_sampling: chrom # below only applies if type in [GeneSites]
   weighted_sampling: len
   dynamic_weights: false
   enable_cache: false
@@ -79,7 +79,7 @@ litrun:
     check_val_every_n_epoch: 1
     accumulate_grad_batches: 1
   wandb:
-    name: model
+    name: ${model.type}_${dataset.type} # date-time will be appended automatically
     project: ${project}
     save_code: false
     tags: []
