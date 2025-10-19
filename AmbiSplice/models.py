@@ -175,9 +175,7 @@ class SpliceSingle(SpliceBaseModule):
 
     def forward(self, batch_feats):
         x = batch_feats['seq_onehot']
-        if x.dtype != torch.float32:
-            x = x.float()
-        
+
         conv = self.conv1(x)
         skip = self.skip(conv)
         j = 0
@@ -227,9 +225,6 @@ class PangolinSingle(SpliceBaseModule):
 
     def forward(self, batch_feats):
         x = batch_feats['seq_onehot']
-        # check x dtype and convert to float if needed
-        if x.dtype != torch.float32:
-            x = x.float()
             
         conv = self.conv1(x)
         skip = self.skip(conv)

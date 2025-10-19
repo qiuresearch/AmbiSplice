@@ -71,13 +71,14 @@ pangolin_ensemble_eval: ## Evaluate Pangolin ensemble average
 		ensemble.model.state_dict_path=[$(HOME)/github/Pangolin/pangolin/models/final.1.0.3.v2,$(HOME)/github/Pangolin/pangolin/models/final.2.0.3.v2,$(HOME)/github/Pangolin/pangolin/models/final.3.0.3.v2] \
 		litrun.resume_from_ckpt=null debug=$(debug)
 
-pangolin_train_single: ## Train Pangolin model
-	# Run Pangolin model (final.modelnum.tissue.epoch) on Pangolin dataset
+pangolin_train_single: ## Train Pangolin model in Single mode
 	conda run --no-capture-output --name $(CONDA_ENV_NAME) python -u run_ambisplice.py stage=train \
 	    dataset.type=Pangolin \
 		dataset.train_path=data/pangolin/dataset_train_all.h5 \
 		model.type=PangolinSingle \
 		model.state_dict_path=null \
+		dataloader.train_batch_size=96 \
+		dataloader.val_batch_size=128 \
 		litrun.resume_from_ckpt=null debug=$(debug)
 
 test_pangolin_dataset: ## Test on Pangolin dataset
@@ -97,4 +98,6 @@ train_genecrops_splicesingle: ## Train SpliceSingle on gene crops
 		dataset.type=GeneCrops \
 		dataset.train_path=data/gwsplice_genecrops.h5 \
 		model.type=SpliceSingle \
+		dataloader.train_batch_size=96 \
+		dataloader.val_batch_size=128 \
 		litrun.resume_from_ckpt=null debug=$(debug)

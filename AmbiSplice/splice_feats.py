@@ -80,10 +80,10 @@ def sprinkle_sites_on_sequence(gene_sites, debug=False):
             }
 
 
-def get_crop_feats_single_seq(seq_feat, num_crops=None, 
-                              crop_size=5000, flank_size=5000,
-                              min_sites=0, min_usage=0,
-                              debug=False):
+def get_crop_feats_from_single_seq(seq_feat, num_crops=None, 
+                                   crop_size=5000, flank_size=5000,
+                                   min_sites=0, min_usage=0,
+                                   debug=False):
     """ Generate crop features for a single RNA transcript by croping the sequence
     Args:
         rna_feats: dict, output of sprinkle_sites_onto_vectors
@@ -95,6 +95,8 @@ def get_crop_feats_single_seq(seq_feat, num_crops=None,
         debug: bool, whether to print debug information
     """
     seq = seq_feat['seq']
+    # dtypes set to be correct for model input
+    # caution: lower precisions used for saving .h5 files whenever possible
     seq_cls = seq_feat['cls'].astype(np.int64)
     seq_cls_odds = seq_feat['cls_odds'].astype(np.float32)
     seq_cls_mask = seq_feat['cls_mask'].astype(np.int32)

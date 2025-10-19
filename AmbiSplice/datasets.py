@@ -31,9 +31,9 @@ class PangolinDataset(Dataset):
 
         # tissue order: heart, liver, brain, testis
         # each tissue: unspliced, spliced, usage
-        sample_feats = {
+        sample_feat = {
             'seq': splice_feats.decode_onehot(X, dim=0, idx2base=np.array(['A', 'C', 'G', 'T', 'N'])),
-            'seq_onehot': X,
+            'seq_onehot': X.astype(np.float32),
             'cls': np.argmax(Y[0:2, :], axis=0), # 0: unspliced, 1: spliced
             'psi': Y[2, :], # usage
             'chrom': Z[0].decode(),
@@ -42,7 +42,7 @@ class PangolinDataset(Dataset):
             'strand': Z[3].decode(),
         }
 
-        return sample_feats
+        return sample_feat
 
     def __len__(self):
         assert len(self.data) % 3 == 0
@@ -95,10 +95,11 @@ class GeneCropsDataset(Dataset):
             raise IndexError(f"Index:{idx} out of bounds for SeqCropsDataset (len(data): {len(self.data.root.crop_feats)}).")
 
         crop_feat = self.data.root.crop_feats[idx]
+        # Change dtypes as needed because of low-precision storage in HDF5 if possible
         sample_feat = {
-            'seq': crop_feat['seq'], # .decode(),
-            'seq_onehot': crop_feat['seq_onehot'],
-            'cls': crop_feat['cls'] if self.num_classes is None else np.minimum(crop_feat['cls'], self.num_classes - 1),
+            'seq': crop_feat['seq'], # .decode(), # strings are saved in bytes in HDF5
+            'seq_onehot': crop_feat['seq_onehot'].astype(np.float32),
+            'cls': crop_feat['cls'].astype(np.int64),
             'psi': crop_feat['psi'], # usage
             'chrom': crop_feat['chrom'].decode(),
             'start': crop_feat['crop_start'][0],
@@ -106,7 +107,8 @@ class GeneCropsDataset(Dataset):
             'strand': crop_feat['strand'].decode(),
         }
 
-        sample_feat['cls'] = sample_feat['cls'].astype(np.int64)
+        if self.num_classes:
+            sample_feat['cls'] = np.minimum(crop_feat['cls'], self.num_classes - 1)
 
         return sample_feat
 
@@ -304,7 +306,7 @@ class GeneSitesDataset(Dataset):
                 gene_ds, 
                 # training=self.training,
                 )
-            crop_feats = splice_feats.get_crop_feats_single_seq(
+            crop_feats = splice_feats.get_crop_feats_from_single_seq(
                 gene_feat,
                 num_crops=11 if self.enable_cache else 1,
                 crop_size=5000,
