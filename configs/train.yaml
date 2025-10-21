@@ -4,6 +4,7 @@ stage: train
 debug: false
 gpus: [0]
 accelerator: gpu
+run_name: ${model.type}_${dataset.type}
 project: GWSplice
 save_prefix: dummy
 save_individual: false # used for eval/test/predict only
@@ -30,13 +31,10 @@ dataset:
   val_size: null
   test_size: null
   predict_size: null
-  stratified_sampling: chrom # below only applies if type in [GeneSites]
-  weighted_sampling: len
-  dynamic_weights: false
   enable_cache: false
 model:
   debug: ${debug}
-  type: SpliceSingle
+  type: null
   dropout: 0.1
   loss: cls+psi
   loss_scale_cls: 0.5
@@ -79,7 +77,7 @@ litrun:
     check_val_every_n_epoch: 1
     accumulate_grad_batches: 1
   wandb:
-    name: ${model.type}_${dataset.type} # date-time will be appended automatically
+    name: ${run_name} # date-time will be appended automatically
     project: ${project}
     save_code: false
     tags: []

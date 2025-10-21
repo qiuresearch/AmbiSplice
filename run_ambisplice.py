@@ -54,12 +54,12 @@ def get_torch_model(model_cfg: omegaconf.DictConfig):
                     10, 10, 10, 10, 25, 25, 25, 25])
     CL = 2 * np.sum(AR * (W - 1))
 
-    if model_cfg.type.upper() == 'SpliceSingle'.upper():
-        torch_model = models.SpliceSingle(L=L, W=W, AR=AR, CL=CL, **model_cfg)
+    if model_cfg.type.upper() == 'SpliceSolo'.upper():
+        torch_model = models.SpliceSolo(L=L, W=W, AR=AR, CL=CL, **model_cfg)
     elif model_cfg.type.upper() == 'Pangolin'.upper():
         torch_model = models.Pangolin(L=L, W=W, AR=AR, **model_cfg)
-    elif model_cfg.type.upper() == 'PangolinSingle'.upper():
-        torch_model = models.PangolinSingle(L=L, W=W, AR=AR, **model_cfg)
+    elif model_cfg.type.upper() == 'PangolinSolo'.upper():
+        torch_model = models.PangolinSolo(L=L, W=W, AR=AR, **model_cfg)
     else:
         raise ValueError(f"Unknown model type: {model_cfg.type}")
 
@@ -150,15 +150,21 @@ def get_datasets(dataset_cfg: omegaconf.DictConfig):
         elif dataset_cfg.stage.lower().startswith(('eval', 'predict')):
             raise ValueError(f"{dataset_cfg.stage} stage requires predict_path to be specified in dataset config!")
 
-    elif dataset_cfg.type.upper() == 'Pangolin'.upper():
+    elif dataset_cfg.type.upper().startswith('PANGOLIN'):
+        if dataset_cfg.type.upper() == 'PangolinSolo'.upper():
+            dataset_class = datasets.PangolinSoloDataset
+        elif dataset_cfg.type.upper() == 'Pangolin'.upper():
+            dataset_class = datasets.PangolinDataset
+        else:
+            raise ValueError(f"Unknown dataset type: {dataset_cfg.type}")
 
         if dataset_cfg.train_path:
-            train_set = datasets.PangolinDataset(file_path=dataset_cfg.train_path, epoch_size=dataset_cfg.train_size, summarize=True, **dataset_cfg)
+            train_set = dataset_class(file_path=dataset_cfg.train_path, epoch_size=dataset_cfg.train_size, summarize=True, **dataset_cfg)
         elif dataset_cfg.stage.lower().startswith('train'):
             raise ValueError("Training stage requires train_path to be specified in dataset config!")
 
         if dataset_cfg.val_path:
-            val_set = datasets.PangolinDataset(file_path=dataset_cfg.val_path, epoch_size=dataset_cfg.val_size, summarize=False, **dataset_cfg)
+            val_set = dataset_class(file_path=dataset_cfg.val_path, epoch_size=dataset_cfg.val_size, summarize=False, **dataset_cfg)
         elif dataset_cfg.stage.lower().startswith('train') and train_set is not None:
             train_split_size = int(0.9 * len(train_set))
             train_set, val_set = torch.utils.data.random_split(train_set, [train_split_size, len(train_set) - train_split_size],
@@ -168,7 +174,7 @@ def get_datasets(dataset_cfg: omegaconf.DictConfig):
             ilogger.warning("No validation dataset used for training!!!")
 
         if dataset_cfg.predict_path:
-            predict_set = datasets.PangolinDataset(file_path=dataset_cfg.predict_path, epoch_size=dataset_cfg.predict_size, summarize=False, **dataset_cfg)
+            predict_set = dataset_class(file_path=dataset_cfg.predict_path, epoch_size=dataset_cfg.predict_size, summarize=False, **dataset_cfg)
         elif dataset_cfg.stage.lower().startswith(('eval', 'predict')):
             raise ValueError(f"{dataset_cfg.stage} stage requires predict_path to be specified in dataset config!")
 

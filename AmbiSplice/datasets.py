@@ -1,6 +1,7 @@
 import os
 import h5py
 import tables
+from omegaconf.listconfig import ListConfig
 import torch
 from torch.utils.data import Dataset
 import numpy as np
@@ -12,30 +13,117 @@ from . import utils
 ilogger = utils.get_pylogger(__name__)
 
 
-class PangolinDataset(Dataset):
-    """ Adapted from Pangolin github repo """
-    def __init__(self, file_path, **kwargs):
-        super(PangolinDataset, self).__init__()
+def get_pangolin_tissue_cols(tissue_types):
+    # tissue order: heart, liver, brain, testis
+    assert isinstance(tissue_types, (list, tuple, ListConfig)) and len(tissue_types) > 0, \
+        f"tissue_types: {tissue_types} must be a list or tuple with at least one element."
+    tissue_types = [t.lower() if isinstance(t, str) else t for t in tissue_types]
+    # starting column for each tissue in Y
+    col_map = {
+        'heart': 0,
+        'liver': 3,
+        'brain': 6,
+        'testis': 9,
+        1: 0,
+        2: 3,
+        3: 6,
+        4: 9,
+    }
+
+    tissue_cols = []
+    for t in tissue_types:
+        if t in col_map:
+            tissue_cols.append(col_map[t])
+        else:
+            raise ValueError(f"Invalid tissue_type: {t}. Must be one of {list(col_map.keys())}.")
+    return tissue_cols
+
+
+class PangolinSoloDataset(Dataset):
+    """ Adapted from Pangolin github repo
+    Returns sample_feat containing only one tissue type per call, which is randomly picked 
+    based on tissue_types list.
+    """
+    def __init__(self, file_path, tissue_types=['heart'], **kwargs):
+        super(PangolinSoloDataset, self).__init__()
         self.file_path = file_path
         self.data = h5py.File(file_path, 'r', libver='latest')
-        self.ctr = 0
+
+        self.tissue_cols = get_pangolin_tissue_cols(tissue_types)
+        self.iterations = 0
 
     def __getitem__(self, idx):
-        self.ctr += 1
-        if self.ctr % 100000 == 0: # workaround to avoid memory issues
+        self.iterations += 1
+        if self.iterations % 100000 == 0: # workaround to avoid memory issues
             self.data.close()
             self.data = h5py.File(self.file_path, 'r', libver='latest')
+
+        if len(self.tissue_cols) > 1:
+            idx = idx // len(self.tissue_cols)
+            tissue_col = self.tissue_cols[idx % len(self.tissue_cols)]
+        else:
+            tissue_col = self.tissue_cols[0]
+
         X = self.data['X' + str(idx)][:].T # transpose to (4, L)
         Y = self.data['Y' + str(idx)][:].T # transpose to (12, L)
         Z = self.data['Z' + str(idx)][:] # (4,): [chrom, start, end, strand]
 
-        # tissue order: heart, liver, brain, testis
         # each tissue: unspliced, spliced, usage
         sample_feat = {
             'seq': splice_feats.decode_onehot(X, dim=0, idx2base=np.array(['A', 'C', 'G', 'T', 'N'])),
             'seq_onehot': X.astype(np.float32),
-            'cls': np.argmax(Y[0:2, :], axis=0), # 0: unspliced, 1: spliced
-            'psi': Y[2, :], # usage
+            'cls': np.argmax(Y[tissue_col:tissue_col+2, :], axis=0), # 0: unspliced, 1: spliced (L)
+            'psi': Y[tissue_col+2, :], # usage (L)
+            'chrom': Z[0].decode(),
+            'start': int(Z[1]),
+            'end': int(Z[2]),
+            'strand': Z[3].decode(),
+        }
+
+        return sample_feat
+
+    def __len__(self):
+        assert len(self.data) % 3 == 0
+        return (len(self.data) // 3) * len(self.tissue_cols)
+    
+    def __del__(self):
+        try:
+            self.data.close()
+        except:
+            ilogger.warning("Failed to close HDF5 file in PangolinSoloDataset.")
+
+
+class PangolinDataset(Dataset):
+    """ Adapted from Pangolin github repo """
+    def __init__(self, file_path, tissue_types=['heart', 'liver', 'brain', 'testis'], **kwargs):
+        super(PangolinDataset, self).__init__()
+        self.file_path = file_path
+        self.data = h5py.File(file_path, 'r', libver='latest')
+
+        self.tissue_cols = get_pangolin_tissue_cols(tissue_types)
+        self.iterations = 0
+
+    def __getitem__(self, idx):
+        self.iterations += 1
+        if self.iterations % 100000 == 0: # workaround to avoid memory issues
+            self.data.close()
+            self.data = h5py.File(self.file_path, 'r', libver='latest')
+
+        X = self.data['X' + str(idx)][:].T # transpose to (4, L)
+        Y = self.data['Y' + str(idx)][:].T # transpose to (12, L)
+        Z = self.data['Z' + str(idx)][:] # (4,): [chrom, start, end, strand]
+
+        # each tissue: unspliced, spliced, usage
+        cls_list, psi_list = [], []
+        for tissue_col in self.tissue_cols:
+            cls_list.append(np.argmax(Y[tissue_col:tissue_col+2, :], axis=0)) # 0: unspliced, 1: spliced
+            psi_list.append(Y[tissue_col+2, :]) # usage
+        
+        sample_feat = {
+            'seq': splice_feats.decode_onehot(X, dim=0, idx2base=np.array(['A', 'C', 'G', 'T', 'N'])),
+            'seq_onehot': X.astype(np.float32),
+            'cls': np.stack(cls_list, axis=0), # (num_tissues, L)
+            'psi': np.stack(psi_list, axis=0), # (num_tissues, L)
             'chrom': Z[0].decode(),
             'start': int(Z[1]),
             'end': int(Z[2]),
