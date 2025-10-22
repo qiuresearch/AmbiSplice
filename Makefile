@@ -73,7 +73,7 @@ pangolin_ensemble_eval: ## Evaluate Pangolin ensemble average
 		litrun.resume_from_ckpt=null \
 		debug=$(debug)
 
-train_pagolinsolo_pangolinsolo: ## Train PangolinSolo model on PangolinSolo dataset
+train_pangolinsolo_pangolinsolo: ## Train PangolinSolo model on PangolinSolo dataset
 	conda run --no-capture-output --name $(CONDA_ENV_NAME) python -u run_ambisplice.py stage=train \
 		run_name=pangolinsolo.pangolinsolo_heart \
 		dataset.type=PangolinSolo \
@@ -86,7 +86,21 @@ train_pagolinsolo_pangolinsolo: ## Train PangolinSolo model on PangolinSolo data
 		litrun.resume_from_ckpt=null \
 		debug=$(debug)
 
-train_pagolin_pangolin: ## Train Pangolin model on Pangolin dataset (all four tissues)
+train_pangolinomni_pangolinsolo: ## Train PangolinOmni model on PangolinSolo dataset
+	conda run --no-capture-output --name $(CONDA_ENV_NAME) python -u run_ambisplice.py stage=train \
+		run_name=pangolinomni.pangolinsolo123 \
+		dataset.type=PangolinSolo \
+		+dataset.tissue_types=[heart,liver,brain] \
+		+dataset.tissue_embedding_path="data/tissue_avg_pca_embeddings.csv" \
+		dataset.train_path=data/pangolin/dataset_train_all.h5 \
+		model.type=PangolinOmni \
+		model.state_dict_path=null \
+		dataloader.train_batch_size=96 \
+		dataloader.val_batch_size=128 \
+		litrun.resume_from_ckpt=null \
+		debug=$(debug)
+
+train_pangolin_pangolin: ## Train Pangolin model on Pangolin dataset (all four tissues)
 	conda run --no-capture-output --name $(CONDA_ENV_NAME) python -u run_ambisplice.py stage=train \
 		run_name=pangolin.pangolin \
 		dataset.type=Pangolin \

@@ -44,12 +44,25 @@ class PangolinSoloDataset(Dataset):
     Returns sample_feat containing only one tissue type per call, which is randomly picked 
     based on tissue_types list.
     """
-    def __init__(self, file_path, tissue_types=['heart'], **kwargs):
+    def __init__(self, file_path, tissue_types=['heart'], tissue_embedding_path=None, **kwargs):
         super(PangolinSoloDataset, self).__init__()
         self.file_path = file_path
         self.data = h5py.File(file_path, 'r', libver='latest')
 
         self.tissue_cols = get_pangolin_tissue_cols(tissue_types)
+        self.tissue_types = [t.lower() for t in tissue_types]
+
+        if tissue_embedding_path:
+            ilogger.info(f"Loading tissue embeddings from {tissue_embedding_path}...")
+            self.tissue_embeddings = pd.read_csv(tissue_embedding_path, index_col=0)
+            self.tissue_embeddings.index = [str(idx).lower() for idx in self.tissue_embeddings.index]
+
+            for t in self.tissue_types:
+                if t not in self.tissue_embeddings.index:
+                    raise ValueError(f"Tissue type {t} not found in tissue embeddings index.")
+        else:
+            self.tissue_embeddings = None
+
         self.iterations = 0
 
     def __getitem__(self, idx):
@@ -60,9 +73,11 @@ class PangolinSoloDataset(Dataset):
 
         if len(self.tissue_cols) > 1:
             idx = idx // len(self.tissue_cols)
-            tissue_col = self.tissue_cols[idx % len(self.tissue_cols)]
+            itissue = idx % len(self.tissue_cols)
         else:
-            tissue_col = self.tissue_cols[0]
+            itissue = 0
+
+        tissue_col = self.tissue_cols[itissue]
 
         X = self.data['X' + str(idx)][:].T # transpose to (4, L)
         Y = self.data['Y' + str(idx)][:].T # transpose to (12, L)
@@ -71,7 +86,7 @@ class PangolinSoloDataset(Dataset):
         # each tissue: unspliced, spliced, usage
         sample_feat = {
             'seq': splice_feats.decode_onehot(X, dim=0, idx2base=np.array(['A', 'C', 'G', 'T', 'N'])),
-            'seq_onehot': X.astype(np.float32),
+            'seq_onehot': X.astype(np.float32), # (4, L)
             'cls': np.argmax(Y[tissue_col:tissue_col+2, :], axis=0), # 0: unspliced, 1: spliced (L)
             'psi': Y[tissue_col+2, :], # usage (L)
             'chrom': Z[0].decode(),
@@ -79,6 +94,15 @@ class PangolinSoloDataset(Dataset):
             'end': int(Z[2]),
             'strand': Z[3].decode(),
         }
+
+        if self.tissue_embeddings is not None:
+            tissue_type = self.tissue_types[itissue]
+            tissue_embedding = self.tissue_embeddings.loc[tissue_type].values.astype(np.float32)
+
+            sample_feat['seq_onehot'] = np.concatenate(
+                [sample_feat['seq_onehot'], 
+                 np.tile(tissue_embedding[:, np.newaxis], (1, sample_feat['seq_onehot'].shape[1]))],
+                axis=0)
 
         return sample_feat
 

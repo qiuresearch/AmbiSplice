@@ -60,6 +60,8 @@ def get_torch_model(model_cfg: omegaconf.DictConfig):
         torch_model = models.Pangolin(L=L, W=W, AR=AR, **model_cfg)
     elif model_cfg.type.upper() == 'PangolinSolo'.upper():
         torch_model = models.PangolinSolo(L=L, W=W, AR=AR, **model_cfg)
+    elif model_cfg.type.upper() == 'PangolinOmni'.upper():
+        torch_model = models.PangolinOmni(L=L, W=W, AR=AR, **model_cfg)
     else:
         raise ValueError(f"Unknown model type: {model_cfg.type}")
 
