@@ -5,6 +5,8 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 import numpy as np
 
+
+
 def plot_one_hot(array, title="One-Hot Encoded Sequence"):
     seq_len = array.shape[0]
     plt.figure(figsize=(12, 3))

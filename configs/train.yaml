@@ -21,7 +21,7 @@ ensemble: # used for eval/test/predict only
 dataset:
   debug: ${debug}
   stage: ${stage}
-  type: null  # Pangolin, GeneSites, GeneCrops
+  type: PangolinSolo  # PangolinSolo, Pangolin, GeneSites, GeneCrops
   train_path: null
   val_path: null
   test_path: null

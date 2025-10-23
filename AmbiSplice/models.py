@@ -123,8 +123,8 @@ class SpliceBaseModule(nn.Module):
         """ Convert the raw network outputs to discrete labels
             preds are the output of forward() without any activation
         """
-        cls_probs = F.softmax(preds['cls_logits'], dim=1)  # (B, 4, crop_size)
-        psi_vals = torch.sigmoid(preds['psi_logits'])  # (B, crop_size)
+        cls_probs = F.softmax(preds['cls_logits'], dim=1)  # (B, num_classes, ..., crop_size)
+        psi_vals = torch.sigmoid(preds['psi_logits'])  # (B, ..., crop_size)
 
         preds['cls'] = cls_probs # torch.argmax(cls_probs, dim=1)  # (B, crop_size)
         preds['psi'] = psi_vals  # (B, crop_size)
@@ -288,9 +288,9 @@ class PangolinSolo(SpliceBaseModule):
                 'psi_logits': out2.squeeze(dim=1),}
     
 
-class Pangolin(SpliceBaseModule):
+class PangolinQuad(SpliceBaseModule):
     def __init__(self, L, W, AR, **kwargs):
-        super(Pangolin, self).__init__()
+        super(PangolinQuad, self).__init__()
         self.n_chans = L
         self.conv1 = nn.Conv1d(4, L, 1) # in_channels, out_channels, kernel_size
         self.skip = nn.Conv1d(L, L, 1)

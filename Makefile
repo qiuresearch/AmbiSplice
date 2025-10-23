@@ -15,7 +15,7 @@ help: ## Display this help message
 	@echo "Usage: make <target>"
 	@echo
 	@echo "Available targets:"
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-42s\033[0m %s\n", $$1, $$2}'
 
 install: ## Install dependencies
 	source $(CONDA_SH_PATH)
@@ -47,7 +47,19 @@ pangolin_download_genomes: ## Download Pangolin genomes
 	faidx Macaca_mulatta.Mmul_10.dna.toplevel.fa
 	faidx Rattus_norvegicus.Rnor_6.0.dna.toplevel.fa
 
-pangolin_eval: ## Evaluate Pangolin model
+eval_pangolin_dataset: ## Test on Pangolin dataset
+	conda run --no-capture-output --name $(CONDA_ENV_NAME) python -u run_ambisplice.py stage=test \
+		dataset.type=pangolin \
+		dataset.predict_path=$(HOME)/github/Pangolin_train/preprocessing/dataset_train_all.h5 \
+		debug=$(debug)
+
+eval_human: ## Test on Human dataset
+	conda run --no-capture-output --name $(CONDA_ENV_NAME) python -u run_ambisplice.py stage=test \
+		dataset.type=ambisplice \
+		dataset.predict_path=$(HOME)/bench/AmbiSplice/data/ambisplice_test.h5 \
+		debug=$(debug)
+
+eval_pangolinorig_pangolin: ## Evaluate Pangolin original model
 	# Run Pangolin model (final.modelnum.tissue.epoch) on Pangolin dataset
 	conda run --no-capture-output --name $(CONDA_ENV_NAME) python -u run_ambisplice.py stage=eval \
 	    save_prefix=Pangolin_model_test \
@@ -59,7 +71,7 @@ pangolin_eval: ## Evaluate Pangolin model
 		ensemble.enable=false \
 		debug=$(debug)
 
-pangolin_ensemble_eval: ## Evaluate Pangolin ensemble average
+eval_pangolin_ensemble_pangolin: ## Evaluate Pangolin ensemble average
 	# Run Pangolin model (final.modelnum.tissue.epoch) on Pangolin dataset
 	conda run --no-capture-output --name $(CONDA_ENV_NAME) python -u run_ambisplice.py stage=eval \
 	    save_prefix=Pangolin_ens_test \
@@ -100,29 +112,17 @@ train_pangolinomni_pangolinsolo: ## Train PangolinOmni model on PangolinSolo dat
 		litrun.resume_from_ckpt=null \
 		debug=$(debug)
 
-train_pangolin_pangolin: ## Train Pangolin model on Pangolin dataset (all four tissues)
+train_pangolinquad_pangolin: ## Train Pangolin model on Pangolin dataset (all four tissues)
 	conda run --no-capture-output --name $(CONDA_ENV_NAME) python -u run_ambisplice.py stage=train \
-		run_name=pangolin.pangolin \
+		run_name=pangolinquad.pangolin \
 		dataset.type=Pangolin \
 		+dataset.tissue_types=[heart,liver,brain,testis] \
 		dataset.train_path=data/pangolin/dataset_train_all.h5 \
-		model.type=Pangolin \
+		model.type=PangolinQuad \
 		model.state_dict_path=null \
 		dataloader.train_batch_size=96 \
 		dataloader.val_batch_size=128 \
 		litrun.resume_from_ckpt=null \
-		debug=$(debug)
-
-test_pangolin_dataset: ## Test on Pangolin dataset
-	conda run --no-capture-output --name $(CONDA_ENV_NAME) python -u run_ambisplice.py stage=test \
-		dataset.type=pangolin \
-		dataset.predict_path=$(HOME)/github/Pangolin_train/preprocessing/dataset_train_all.h5 \
-		debug=$(debug)
-
-test_human: ## Test on Human dataset
-	conda run --no-capture-output --name $(CONDA_ENV_NAME) python -u run_ambisplice.py stage=test \
-		dataset.type=ambisplice \
-		dataset.predict_path=$(HOME)/bench/AmbiSplice/data/ambisplice_test.h5 \
 		debug=$(debug)
 
 train_splicesolo_genecrops: ## Train SpliceSolo on genecrops dataset

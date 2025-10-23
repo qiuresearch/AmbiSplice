@@ -56,14 +56,16 @@ def get_torch_model(model_cfg: omegaconf.DictConfig):
 
     if model_cfg.type.upper() == 'SpliceSolo'.upper():
         torch_model = models.SpliceSolo(L=L, W=W, AR=AR, CL=CL, **model_cfg)
-    elif model_cfg.type.upper() == 'Pangolin'.upper():
-        torch_model = models.Pangolin(L=L, W=W, AR=AR, **model_cfg)
+    elif model_cfg.type.upper() == 'PangolinQuad'.upper():
+        torch_model = models.PangolinQuad(L=L, W=W, AR=AR, **model_cfg)
     elif model_cfg.type.upper() == 'PangolinSolo'.upper():
         torch_model = models.PangolinSolo(L=L, W=W, AR=AR, **model_cfg)
     elif model_cfg.type.upper() == 'PangolinOmni'.upper():
         torch_model = models.PangolinOmni(L=L, W=W, AR=AR, **model_cfg)
     else:
         raise ValueError(f"Unknown model type: {model_cfg.type}")
+
+    ilogger.info(f"Initialized model {model_cfg.type} with config:\n{omegaconf.OmegaConf.to_yaml(model_cfg)}")
 
     if model_cfg.state_dict_path is not None:
         state_dict_path = os.path.abspath(os.path.expanduser(model_cfg.state_dict_path))
@@ -183,6 +185,7 @@ def get_datasets(dataset_cfg: omegaconf.DictConfig):
     else:
         raise ValueError(f"Unknown dataset type: {dataset_cfg.type}")
 
+    ilogger.info(f'Initialized datasets with config:\n{omegaconf.OmegaConf.to_yaml(dataset_cfg)}')
     return {'train': train_set, 'val': val_set, 'test': test_set, 'predict': predict_set}
 
 
@@ -192,11 +195,13 @@ def get_litdata(datasets, dataloader_cfg: omegaconf.DictConfig):
                                        test_dataset=datasets['test'],
                                        predict_dataset=datasets['predict'],
                                        **dataloader_cfg)
+    ilogger.info(f"Initialized litdata with config:\n{omegaconf.OmegaConf.to_yaml(dataloader_cfg)}")
     return litdata
 
 
 def get_litrun(cfg: omegaconf.DictConfig, model: nn.Module):
     litrun = litmodule.OmniRunModule(model=model, cfg=cfg)
+    ilogger.info(f"Initialized litrun with config:\n{omegaconf.OmegaConf.to_yaml(cfg)}")
     return litrun
 
 
@@ -281,7 +286,7 @@ def main(main_cfg: omegaconf.DictConfig):
     litdata = get_litdata(datasets, main_cfg.dataloader)
 
     if main_cfg.stage in ('train', 'training', 'fit'):
-        ilogger.info(f"Training model with config:\n{omegaconf.OmegaConf.to_yaml(main_cfg)}")
+        # ilogger.info(f"Training model with config:\n{omegaconf.OmegaConf.to_yaml(main_cfg)}")
         trainer = litrun.fit(litdata, save_cfg=main_cfg, accelerator=accelerator, devices=devices, debug=main_cfg.debug)
         ilogger.info("Training completed.")
         

@@ -3,6 +3,8 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 # from scipy import integrate
+from AmbiSplice import utils
+ilogger = utils.get_pylogger(os.path.basename(__name__))
 
 def topks_roc_prc_metrics(y_pred, y_true, ks=(0.5, 1, 2, 4), multiples_of_true=False):
     """ Compute top-k accuracy, precision, recall, f1, auroc, auprc
@@ -16,7 +18,7 @@ def topks_roc_prc_metrics(y_pred, y_true, ks=(0.5, 1, 2, 4), multiples_of_true=F
         y_true = y_true.flatten()
     idx_true = torch.where(y_true > 0)[0]
     if idx_true.size == 0:
-        print("No positive samples in y_true.")
+        ilogger.warning("No positive samples in y_true.")
         return None
 
     if y_pred.ndim > 1:
@@ -186,9 +188,9 @@ def calc_metric(preds, labels, keep_batchdim=False, to_numpy=True, eps=1e-8):
     # compute precision, recall, f1 for cls
     # cls_logits in (B, num_classes, crop_size)
     if 'cls' in preds:
-        cls_pred = torch.movedim(preds['cls'], -2, -1)
+        cls_pred = torch.movedim(preds['cls'], 1, -1)
     elif 'cls_logits' in preds:
-        cls_pred = F.softmax(torch.movedim(preds['cls_logits'], -2, -1), dim=-1)  # (B, crop_size, num_classes)
+        cls_pred = F.softmax(torch.movedim(preds['cls_logits'], 1, -1), dim=-1)  # (B, crop_size, num_classes)
     else:
         raise ValueError("No cls or cls_logits in preds.")
         
@@ -198,6 +200,8 @@ def calc_metric(preds, labels, keep_batchdim=False, to_numpy=True, eps=1e-8):
         dims_to_sum = tuple(range(1, cls_pred.ndim - 1))  # sum over all but batch and last dimension
     else:
         dims_to_sum = tuple(range(cls_pred.ndim - 1))  # sum over all but last dimension
+
+    # print(cls_pred.shape, cls_label.shape, dims_to_sum)
 
     cls_tp = (cls_pred * cls_label).sum(dim=dims_to_sum)  # (num_classes,) or (B, num_classes)
     cls_fp = (cls_pred * (1 - cls_label)).sum(dim=dims_to_sum)  # (num_classes,) or (B, num_classes)
@@ -238,14 +242,19 @@ def calc_metric(preds, labels, keep_batchdim=False, to_numpy=True, eps=1e-8):
 def calc_benchmark(preds, labels, keep_batchdim=True, eps=1e-8):
     """ preds are the output of forward() without any activation
         labels are the ground truth in the batch_feats
+        
+        Caution: the channel dimension of preds['cls'] should be the second dimension
     """
+    ilogger.info("Calculating loss metrics...")
     loss, benchmark_metrics = calc_loss(preds, labels)
+    ilogger.info("Calculating performance metrics...")
     benchmark_metrics.update(calc_metric(preds, labels, keep_batchdim=keep_batchdim, to_numpy=True, eps=eps))
 
+    ilogger.info("Calculating ROC and PRC metrics...")
     if keep_batchdim:
         batch_size = labels['cls'].shape[0]
         for i in range(batch_size):
-            y_pred = (preds['cls'][i].argmax(dim=-2).flatten() > 0.5).to(torch.float32)
+            y_pred = (preds['cls'][i].argmax(dim=1).flatten() > 0.5).to(torch.float32)
             y_true = (labels['cls'][i].flatten() > 0.5).to(torch.float32)
             metric = topks_roc_prc_metrics(y_pred, y_true, ks=(0.5, 1, 2, 4), multiples_of_true=True)
             if metric is None:
@@ -263,7 +272,7 @@ def calc_benchmark(preds, labels, keep_batchdim=True, eps=1e-8):
             if isinstance(benchmark_metrics[key], list):
                 benchmark_metrics[key] = np.array(benchmark_metrics[key])
     else:
-        y_pred = (preds['cls'].argmax(dim=-2).flatten() > 0.5).to(torch.float32)
+        y_pred = (preds['cls'].argmax(dim=1).flatten() > 0.5).to(torch.float32)
         y_true = (labels['cls'].flatten() > 0.5).to(torch.float32)
         benchmark_metrics.update(topks_roc_prc_metrics(y_pred, y_true, ks=(0.5, 1, 2, 4), multiples_of_true=True))
 

@@ -36,16 +36,16 @@ def summarize_tensors(vars_dict, prefix=''):
     print("-" * 110)
     for k, v in vars_dict.items():
         if isinstance(v, torch.Tensor):
+            vtype = "Tensor"
             shape = str(tuple(v.shape))
             dtype = str(v.dtype)
             device = str(v.device)
-            vtype = "Tensor"
             requires_grad = str(v.requires_grad)
         else:
-            shape = f'({len(v)})' if isinstance(v, (list, tuple)) else "-"
-            dtype = "-"
-            device = "-"
             vtype = type(v).__name__
+            shape = str(tuple(v.shape)) if hasattr(v, 'shape') else f'({len(v)})' if isinstance(v, (list, tuple)) else "-"
+            dtype = str(v.dtype) if hasattr(v, 'dtype') else "-"
+            device = "-"
             requires_grad = "-"
         print(f"{k:<20} {vtype:<20} {shape:<25} {dtype:<15} {device:<15} {requires_grad:<15}")
     print("-" * 110)
@@ -185,7 +185,7 @@ class OmniDataModule(LightningDataModule):
         """Extra things to save to checkpoint."""
         return {}
 
-    def load_state_dict(self, state_dict: Dict[str, Any]):
+    def load_state_dict(self, state_dict: Dict[str, Any] = None):
         """Things to do when loading checkpoint."""
         pass
 
@@ -536,9 +536,9 @@ class OmniRunModule(LightningModule):
             summarize_tensors(batch_feats, prefix='Predict Step Input')
 
         preds = self.model(batch_feats)
-        pred_labels = self.model.preds_to_labels(preds)
+        self.model.preds_to_labels(preds)
         if self._predict_steps == 0:
-            summarize_tensors(pred_labels, prefix='Predict Step Output')
+            summarize_tensors(preds, prefix='Predict Step Output')
 
         loss, loss_items = self.model.calc_loss(preds, batch_feats)
         loss_items.update(self.model.calc_metric(preds, batch_feats))
@@ -548,7 +548,7 @@ class OmniRunModule(LightningModule):
                 summarize_tensors(loss_items, prefix='Predict Step Metrics')
 
         self._predict_steps += 1
-        return (batch_feats, pred_labels)
+        return (batch_feats, preds)
 
     def on_predict_epoch_end(self):
         if len(self.predict_epoch_metrics) > 0 and not self.is_child_process:
@@ -691,25 +691,26 @@ class OmniRunModule(LightningModule):
             ckpt_path=self.cfg.get('resume_from_ckpt', None),
         )
 
+        if save_prefix and not self.is_child_process and self.predict_epoch_metrics:
+            metrics_path = f"{save_prefix}_batch_metrics.csv"
+            ilogger.info(f"Saving batch metrics to {metrics_path} ...")
+            save_epoch_metrics(self.predict_epoch_metrics, metrics_path)
+            ilogger.info(f"Batch metrics saved to {metrics_path}")
+
         # concat all batches to two dicts of tensors (feats, preds)
         eval_feats, eval_preds = tensor_utils.concat_dicts_outputs(eval_outputs)
-
-        if save_prefix is not None and not self.is_child_process:
+        del eval_outputs
+        
+        if save_prefix and not self.is_child_process:
             save_path = f"{save_prefix}_eval_outputs.pt"
             ilogger.info(f"Saving outputs to {save_path} ...")
             torch.save((eval_feats, eval_preds), save_path)
             ilogger.info(f"Outputs saved to {save_path}")
 
-            if self.predict_epoch_metrics and len(self.predict_epoch_metrics) > 0:
-                metrics_path = f"{save_prefix}_batch_metrics.csv"
-                ilogger.info(f"Saving batch metrics to {metrics_path} ...")
-                save_epoch_metrics(self.predict_epoch_metrics, metrics_path)
-                ilogger.info(f"Batch metrics saved to {metrics_path}")
-
         ilogger.info("Calculating summary metrics ...")
         sum_metrics = loss_metrics.calc_benchmark(eval_preds, eval_feats, keep_batchdim=False)
 
-        if save_prefix is not None and not self.is_child_process:
+        if save_prefix and not self.is_child_process:
             metrics_path = f"{save_prefix}_sum_metrics.yaml"
             ilogger.info(f"Saving test summary metrics to {metrics_path} ...")
             tensor_utils.to_yaml(sum_metrics, yaml_path=metrics_path)
@@ -718,7 +719,7 @@ class OmniRunModule(LightningModule):
             print("Summary Metrics:")
             print(sum_metrics)
 
-        if save_individual and save_prefix is not None and not self.is_child_process:
+        if save_individual and save_prefix and not self.is_child_process:
             ilogger.info("Calculating individual metrics ...")
             ind_metrics = loss_metrics.calc_benchmark(eval_preds, eval_feats, keep_batchdim=True)
 
@@ -729,7 +730,7 @@ class OmniRunModule(LightningModule):
         else:
             ind_metrics = None
 
-        return eval_feats, eval_preds, sum_metrics
+        return {'feats': eval_feats, 'preds': eval_preds, 'sum_metrics': sum_metrics, 'ind_metrics': ind_metrics}
 
     def predict(self, datamodule, save_prefix=None, accelerator="cuda", devices="auto", debug=False, **kwargs):
         """ Inference using PyTorch Lightning Trainer.

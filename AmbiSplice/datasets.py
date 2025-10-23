@@ -1,9 +1,9 @@
 import os
 import h5py
 import tables
-from omegaconf.listconfig import ListConfig
 import torch
 from torch.utils.data import Dataset
+from omegaconf.listconfig import ListConfig
 import numpy as np
 import pandas as pd
 
@@ -44,11 +44,15 @@ class PangolinSoloDataset(Dataset):
     Returns sample_feat containing only one tissue type per call, which is randomly picked 
     based on tissue_types list.
     """
-    def __init__(self, file_path, tissue_types=['heart'], tissue_embedding_path=None, **kwargs):
+    def __init__(self, file_path, tissue_types=['heart'], tissue_embedding_path=None, epoch_size=None, **kwargs):
         super(PangolinSoloDataset, self).__init__()
         self.file_path = file_path
         self.data = h5py.File(file_path, 'r', libver='latest')
-
+        assert len(self.data) % 3 == 0
+        self.epoch_size = len(self.data) // 3 * len(tissue_types)
+        if epoch_size is not None:
+            self.epoch_size = min(epoch_size, self.epoch_size)
+        
         self.tissue_cols = get_pangolin_tissue_cols(tissue_types)
         self.tissue_types = [t.lower() for t in tissue_types]
 
@@ -107,8 +111,7 @@ class PangolinSoloDataset(Dataset):
         return sample_feat
 
     def __len__(self):
-        assert len(self.data) % 3 == 0
-        return (len(self.data) // 3) * len(self.tissue_cols)
+        return self.epoch_size
     
     def __del__(self):
         try:
@@ -119,10 +122,14 @@ class PangolinSoloDataset(Dataset):
 
 class PangolinDataset(Dataset):
     """ Adapted from Pangolin github repo """
-    def __init__(self, file_path, tissue_types=['heart', 'liver', 'brain', 'testis'], **kwargs):
+    def __init__(self, file_path, tissue_types=['heart', 'liver', 'brain', 'testis'], epoch_size=None, **kwargs):
         super(PangolinDataset, self).__init__()
         self.file_path = file_path
         self.data = h5py.File(file_path, 'r', libver='latest')
+        assert len(self.data) % 3 == 0
+        self.epoch_size = len(self.data) // 3
+        if epoch_size is not None:
+            self.epoch_size = min(epoch_size, self.epoch_size)
 
         self.tissue_cols = get_pangolin_tissue_cols(tissue_types)
         self.iterations = 0
@@ -157,8 +164,7 @@ class PangolinDataset(Dataset):
         return sample_feat
 
     def __len__(self):
-        assert len(self.data) % 3 == 0
-        return len(self.data) // 3
+        return self.epoch_size
     
     def __del__(self):
         try:

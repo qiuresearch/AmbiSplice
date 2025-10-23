@@ -1,15 +1,17 @@
 # AmbiSplice
+Data-driven computational model to predict context-dependent splicing
 
 ## Install
+Run the following lines or "make install" in the repository home after cloning.
+```
 conda create -n ambisplice python=3.11 -y
 
-pip install torch==2.6.0 torchvision==0.21.0 torchaudio==2.6.0 --index-url 
-https://download.pytorch.org/whl/cu126
+pip install torch==2.6.0 torchvision==0.21.0 torchaudio==2.6.0 --index-url https://download.pytorch.org/whl/cu126
 
 pip install lightning
 
 conda install -c conda-forge pandas numpy condahydra-core omegaconf wandb gputil matplotlib beartype h5py pytables -y
-
+```
 ## Datasets
 ### Pangolin original data
 1. Pangolin_train github repo provides the following intermediate files:

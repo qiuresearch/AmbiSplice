@@ -8,15 +8,15 @@ https://github.com/microsoft/protein-frame-flow/blob/main/experiments/utils.py
 import os
 import logging
 import torch
-from typing import Optional
 from pytorch_lightning.utilities.rank_zero import rank_zero_only
 
+logging.basicConfig(level=logging.INFO)
 
 def is_child_process():
     return torch.distributed.is_available() and torch.distributed.is_initialized() and torch.distributed.get_rank() > 0
     
 
-def get_rank() -> Optional[int]:
+def get_rank():
     # SLURM_PROCID can be set even if SLURM is not managing the multiprocessing,
     # therefore LOCAL_RANK needs to be checked first
     rank_keys = ("GLOBAL_RANK", "LOCAL_RANK", "SLURM_PROCID", "JSM_NAMESPACE_RANK") # NODE_RANK RANK
