@@ -1,7 +1,7 @@
 .ONESHELL:
 SHELL := /bin/bash
 .DEFAULT_GOAL := help
-debug=false
+debug?=false
 
 # Use ENV_VAR if set, otherwise default to "default_value"
 # ENV_VAR ?= default_value
@@ -47,14 +47,21 @@ pangolin_download_genomes: ## Download Pangolin genomes
 	faidx Macaca_mulatta.Mmul_10.dna.toplevel.fa
 	faidx Rattus_norvegicus.Rnor_6.0.dna.toplevel.fa
 
-eval_pangolin_dataset: ## Test on Pangolin dataset
-	conda run --no-capture-output --name $(CONDA_ENV_NAME) python -u run_ambisplice.py stage=test \
+eval_pangolin_pangolin_test: ## Evaluate pangolin model on Pangolin test dataset
+	ckpt_dir="checkpoints/pangolin.pangolin_2025-10-21_22-16-17_mnsgbck4"
+	conda run --no-capture-output --name $(CONDA_ENV_NAME) python -u run_ambisplice.py stage=eval \
+		save_prefix=$${ckpt_dir}/pangolin_test \
 		dataset.type=pangolin \
-		dataset.predict_path=$(HOME)/github/Pangolin_train/preprocessing/dataset_train_all.h5 \
+		dataset.train_path=null \
+		dataset.predict_size=21000 \
+		dataset.predict_path=data/pangolin/dataset_test_1.h5 \
+		model.type=pangolin \
+		model.state_dict_path=null \
+		litrun.resume_from_ckpt=$${ckpt_dir}/last.ckpt \
 		debug=$(debug)
 
 eval_human: ## Test on Human dataset
-	conda run --no-capture-output --name $(CONDA_ENV_NAME) python -u run_ambisplice.py stage=test \
+	conda run --no-capture-output --name $(CONDA_ENV_NAME) python -u run_ambisplice.py stage=eval \
 		dataset.type=ambisplice \
 		dataset.predict_path=$(HOME)/bench/AmbiSplice/data/ambisplice_test.h5 \
 		debug=$(debug)

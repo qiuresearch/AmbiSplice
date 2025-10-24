@@ -288,9 +288,9 @@ class PangolinSolo(SpliceBaseModule):
                 'psi_logits': out2.squeeze(dim=1),}
     
 
-class PangolinQuad(SpliceBaseModule):
+class Pangolin(SpliceBaseModule):
     def __init__(self, L, W, AR, **kwargs):
-        super(PangolinQuad, self).__init__()
+        super(Pangolin, self).__init__()
         self.n_chans = L
         self.conv1 = nn.Conv1d(4, L, 1) # in_channels, out_channels, kernel_size
         self.skip = nn.Conv1d(L, L, 1)

@@ -12,16 +12,15 @@ import torch.nn as nn
 
 from AmbiSplice import utils
 from AmbiSplice import models
+from AmbiSplice import visuals
 from AmbiSplice import datasets
 from AmbiSplice import litmodule
 from AmbiSplice import loss_metrics
-from AmbiSplice import tensor_utils
 
 ilogger = utils.get_pylogger(__name__)
 
-def get_accelerator_devices(gpus=[0]):
-    """ Determine the devices to be used for training."""
-
+def get_accelerator_devices(gpus=[0], matmul_precision='medium', deterministic=False):
+    """ Get accelerator and devices for PyTorch Lightning Trainer."""
     if not isinstance(gpus, (list, tuple, omegaconf.listconfig.ListConfig)):
         gpus = [] if gpus is None else [gpus]
 
@@ -37,8 +36,8 @@ def get_accelerator_devices(gpus=[0]):
         accelerator = str(torch.device("cpu"))
         devices = "auto"
 
-    torch.set_float32_matmul_precision('medium')
-    torch.use_deterministic_algorithms(False)
+    torch.set_float32_matmul_precision(matmul_precision)
+    torch.use_deterministic_algorithms(deterministic)
     print(f"Available accelerator: {accelerator}; devices: {devices}")
 
     return accelerator, devices
@@ -56,8 +55,8 @@ def get_torch_model(model_cfg: omegaconf.DictConfig):
 
     if model_cfg.type.upper() == 'SpliceSolo'.upper():
         torch_model = models.SpliceSolo(L=L, W=W, AR=AR, CL=CL, **model_cfg)
-    elif model_cfg.type.upper() == 'PangolinQuad'.upper():
-        torch_model = models.PangolinQuad(L=L, W=W, AR=AR, **model_cfg)
+    elif model_cfg.type.upper() == 'Pangolin'.upper():
+        torch_model = models.Pangolin(L=L, W=W, AR=AR, **model_cfg)
     elif model_cfg.type.upper() == 'PangolinSolo'.upper():
         torch_model = models.PangolinSolo(L=L, W=W, AR=AR, **model_cfg)
     elif model_cfg.type.upper() == 'PangolinOmni'.upper():
@@ -296,7 +295,9 @@ def main(main_cfg: omegaconf.DictConfig):
         if not main_cfg.ensemble.enable:
             eval_outputs = litrun.evaluate(datamodule=litdata,
                                            save_prefix=main_cfg.save_prefix, save_individual=main_cfg.save_individual,
-                                           accelerator=accelerator, devices=devices, debug=main_cfg.debug)            
+                                           accelerator=accelerator, devices=devices, debug=main_cfg.debug)
+            if main_cfg.save_prefix and 'sum_metrics' in eval_outputs:
+                visuals.plot_sum_metrics(eval_outputs['sum_metrics'], save_prefix=main_cfg.save_prefix+'_sum_metrics', display=False)
         else:
             litruns = get_ensemble_litruns(main_cfg, model=torch_model)
             epoch_feats = None
@@ -309,10 +310,13 @@ def main(main_cfg: omegaconf.DictConfig):
                                                accelerator=accelerator, devices=devices, debug=main_cfg.debug)
 
                 if epoch_feats is None:
-                    epoch_feats = eval_outputs[0]  # same for all ensemble members
-                ensemble_cls.append(eval_outputs[1]['cls'])  # list of tensors
-                ensemble_psi.append(eval_outputs[1]['psi'])  # list of tensors
-                
+                    epoch_feats = eval_outputs['feats']  # same for all ensemble members
+                ensemble_cls.append(eval_outputs['preds']['cls'])  # list of tensors
+                ensemble_psi.append(eval_outputs['preds']['psi'])  # list of tensors
+
+                if main_cfg.save_prefix and 'sum_metrics' in eval_outputs:
+                    visuals.plot_sum_metrics(eval_outputs['sum_metrics'], save_prefix=main_cfg.save_prefix+f'_ens{i+1}_sum_metrics', display=False)
+
                 # delete litrun to save memory
                 del litrun
                 del eval_outputs
@@ -330,9 +334,11 @@ def main(main_cfg: omegaconf.DictConfig):
             
             ensemble_metrics = loss_metrics.calc_benchmark(eval_outputs[1], eval_outputs[0], keep_batchdim=False)
             if main_cfg.save_prefix is not None:
-                metrics_path = f"{main_cfg.save_prefix}_ens_metrics.yaml"
-                tensor_utils.to_yaml(ensemble_metrics, metrics_path)
+                metrics_path = f"{main_cfg.save_prefix}_ens_sum_metrics.yaml"
+                utils.to_yaml(ensemble_metrics, metrics_path)
                 ilogger.info(f"Ensemble summary metrics saved to {metrics_path}")
+
+                visuals.plot_sum_metrics(ensemble_metrics['sum_metrics'], save_prefix=main_cfg.save_prefix+'_ens_sum_metrics', display=False)
 
                 if main_cfg.save_individual:
                     ind_metrics = loss_metrics.calc_benchmark(eval_outputs[1], eval_outputs[0], keep_batchdim=True)

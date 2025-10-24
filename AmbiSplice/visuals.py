@@ -1,10 +1,59 @@
-# visual_utils.py
-## VISUAL Module
-
+import os
+import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
-import numpy as np
 
+from . import utils
+
+def plot_sum_metrics(sum_metrics, save_prefix=None, display=True):
+    plt.figure(figsize=(13, 10))
+
+    # display all scalar number metrics in sum_metrics as a table
+    plt.subplot(2, 2, 1)
+    scalar_metrics = {k: v for k, v in sum_metrics.items() if utils.is_scalar(v)}
+    table_data = [[k, f"{v:.4f}"] for k, v in scalar_metrics.items()]
+    table = plt.table(cellText=table_data, colLabels=['Metric', 'Value'], loc='center')
+    table.auto_set_font_size(False)
+    table.set_fontsize(12)
+    table.scale(1, 2)
+    plt.axis('off')
+    plt.title('Overall Metrics')
+
+    plt.subplot(2, 2, 2)
+    plt.title('Top-K Metrics')
+    metrics_to_plot = ['topk_accuracy', 'topk_precision', 'topk_recall', 'topk_f1']
+    width = 1.0 / len(metrics_to_plot) * 0.8  # the width of the bars
+    x_pos = np.arange(len(sum_metrics['topk_threshold'])) - (width * (len(metrics_to_plot) - 1) / 2)
+
+    for i, metric in enumerate(metrics_to_plot):
+        plt.bar(x_pos + i * width, sum_metrics[metric], width=width, label=metric.split('_')[-1])
+    plt.xticks(np.arange(len(sum_metrics['topk_threshold'])),
+            [f"K={int(k) if k >= 1 else k}\n({sum_metrics['k'][i]})" for i, k in enumerate(sum_metrics['k0'])])
+    plt.grid()
+    plt.legend()
+
+    plt.subplot(2, 2, 3)
+    plt.title('Precision-Recall Curve')
+    plt.plot(sum_metrics['recall'], sum_metrics['precision'], marker='o', label='PRC curve')
+    plt.xlabel('Recall')    
+    plt.ylabel('Precision')
+    plt.grid()
+    plt.legend()
+
+    plt.subplot(2, 2, 4)
+    plt.title('Receiver Operating Characteristic Curve')
+    plt.plot(sum_metrics['fpr'], sum_metrics['tpr'], marker='o', label='ROC curve')
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('True Positive Rate')
+    plt.grid()
+    plt.legend()            
+
+    plt.figtext(0.99, 0.01, f"{save_prefix}.png", horizontalalignment='right', fontsize=9)
+    if save_prefix:
+        plt.savefig(f"{save_prefix}.png", dpi=300, bbox_inches='tight')
+
+    if display:
+        plt.show()
 
 
 def plot_one_hot(array, title="One-Hot Encoded Sequence"):

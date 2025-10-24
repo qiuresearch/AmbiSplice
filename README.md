@@ -2,7 +2,12 @@
 Data-driven computational model to predict context-dependent splicing
 
 ## Install
-Run the following lines or "make install" in the repository home after cloning.
+
+1. Run "make install" in the repository home after cloning.
+
+or
+
+2. Run the following lines:
 ```
 conda create -n ambisplice python=3.11 -y
 

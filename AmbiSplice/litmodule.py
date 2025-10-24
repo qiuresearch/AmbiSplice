@@ -20,7 +20,6 @@ from pytorch_lightning.callbacks import RichProgressBar
 from pytorch_lightning.callbacks import TQDMProgressBar
 
 from . import utils
-from . import tensor_utils
 from . import loss_metrics
 
 ilogger = utils.get_pylogger(__name__)
@@ -698,7 +697,7 @@ class OmniRunModule(LightningModule):
             ilogger.info(f"Batch metrics saved to {metrics_path}")
 
         # concat all batches to two dicts of tensors (feats, preds)
-        eval_feats, eval_preds = tensor_utils.concat_dicts_outputs(eval_outputs)
+        eval_feats, eval_preds = utils.concat_dicts_outputs(eval_outputs)
         del eval_outputs
         
         if save_prefix and not self.is_child_process:
@@ -713,7 +712,7 @@ class OmniRunModule(LightningModule):
         if save_prefix and not self.is_child_process:
             metrics_path = f"{save_prefix}_sum_metrics.yaml"
             ilogger.info(f"Saving test summary metrics to {metrics_path} ...")
-            tensor_utils.to_yaml(sum_metrics, yaml_path=metrics_path)
+            utils.to_yaml(sum_metrics, yaml_path=metrics_path)
             ilogger.info(f"Test summary metrics saved to {metrics_path}")
         else:
             print("Summary Metrics:")
@@ -755,7 +754,7 @@ class OmniRunModule(LightningModule):
         )
 
         # concat all batches to two dicts of tensors (batch_feats, preds)
-        input_feats, pred_targets = tensor_utils.concat_dicts_outputs(pred_outputs)
+        input_feats, pred_targets = utils.concat_dicts_outputs(pred_outputs)
 
         if save_prefix is not None and not self.is_child_process:
             save_path = f"{save_prefix}_pred_outputs.pt"

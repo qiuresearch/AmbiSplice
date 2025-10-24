@@ -92,7 +92,7 @@ class PangolinSoloDataset(Dataset):
             'seq': splice_feats.decode_onehot(X, dim=0, idx2base=np.array(['A', 'C', 'G', 'T', 'N'])),
             'seq_onehot': X.astype(np.float32), # (4, L)
             'cls': np.argmax(Y[tissue_col:tissue_col+2, :], axis=0), # 0: unspliced, 1: spliced (L)
-            'psi': Y[tissue_col+2, :], # usage (L)
+            'psi': Y[tissue_col+2, :].astype(np.float32), # usage (L)
             'chrom': Z[0].decode(),
             'start': int(Z[1]),
             'end': int(Z[2]),
@@ -153,8 +153,8 @@ class PangolinDataset(Dataset):
         sample_feat = {
             'seq': splice_feats.decode_onehot(X, dim=0, idx2base=np.array(['A', 'C', 'G', 'T', 'N'])),
             'seq_onehot': X.astype(np.float32),
-            'cls': np.stack(cls_list, axis=0), # (num_tissues, L)
-            'psi': np.stack(psi_list, axis=0), # (num_tissues, L)
+            'cls': np.stack(cls_list, axis=0).astype(np.int64), # (num_tissues, L)
+            'psi': np.stack(psi_list, axis=0).astype(np.float32), # (num_tissues, L)
             'chrom': Z[0].decode(),
             'start': int(Z[1]),
             'end': int(Z[2]),
