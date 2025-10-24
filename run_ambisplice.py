@@ -338,7 +338,7 @@ def main(main_cfg: omegaconf.DictConfig):
                 utils.to_yaml(ensemble_metrics, metrics_path)
                 ilogger.info(f"Ensemble summary metrics saved to {metrics_path}")
 
-                visuals.plot_sum_metrics(ensemble_metrics['sum_metrics'], save_prefix=main_cfg.save_prefix+'_ens_sum_metrics', display=False)
+                visuals.plot_sum_metrics(ensemble_metrics, save_prefix=main_cfg.save_prefix+'_ens_sum_metrics', display=False)
 
                 if main_cfg.save_individual:
                     ind_metrics = loss_metrics.calc_benchmark(eval_outputs[1], eval_outputs[0], keep_batchdim=True)

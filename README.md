@@ -15,7 +15,7 @@ pip install torch==2.6.0 torchvision==0.21.0 torchaudio==2.6.0 --index-url https
 
 pip install lightning
 
-conda install -c conda-forge pandas numpy condahydra-core omegaconf wandb gputil matplotlib beartype h5py pytables -y
+conda install -c conda-forge pandas numpy hydra-core omegaconf wandb gputil matplotlib beartype h5py pytables -y
 ```
 ## Datasets
 ### Pangolin original data

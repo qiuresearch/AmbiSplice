@@ -249,7 +249,7 @@ def calc_benchmark(preds, labels, keep_batchdim=True, eps=1e-8):
     """
     ilogger.info("Calculating loss metrics...")
     loss, benchmark_metrics = calc_loss(preds, labels)
-    ilogger.info("Calculating performance metrics...")
+    ilogger.info("Calculating eval metrics...")
     benchmark_metrics.update(calc_metric(preds, labels, keep_batchdim=keep_batchdim, to_numpy=True, eps=eps))
 
     ilogger.info("Calculating ROC and PRC metrics...")

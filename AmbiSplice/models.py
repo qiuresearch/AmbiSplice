@@ -1,9 +1,7 @@
 import numpy as np
-# import scipy.integrate as integrate
 import torch
 import torch.nn.functional as F
 import torch.nn as nn
-from . import loss_metrics
 
 L = 32
 # convolution window size in residual units
@@ -50,10 +48,10 @@ class SpliceBaseModule(nn.Module):
             labels are the ground truth in the batch_feats
         """
 
-        # TODO::
+        # ::TODO::
         # 1) Many sequences are shorter than crop_size, so we need to mask out the padded regions
-        # cls has shape (B, 4, crop_size)
-        # psi has shape (B, 1, crop_size)
+        # cls has shape (B, num_classes, ..., crop_size)
+        # psi has shape (B, ,..., crop_size)
         # 2) cls_odds and psi_std are not used currently
 
         loss_items = {}
@@ -151,12 +149,6 @@ class SpliceSolo(SpliceBaseModule):
                 self.convs.append(nn.Conv1d(L, L, 1))
         self.conv_last1 = nn.Conv1d(L, 4, 1)
         self.conv_last2 = nn.Conv1d(L, 1, 1)
-        # self.conv_last3 = nn.Conv1d(L, 2, 1)
-        # self.conv_last4 = nn.Conv1d(L, 1, 1)
-        # self.conv_last5 = nn.Conv1d(L, 2, 1)
-        # self.conv_last6 = nn.Conv1d(L, 1, 1)
-        # self.conv_last7 = nn.Conv1d(L, 2, 1)
-        # self.conv_last8 = nn.Conv1d(L, 1, 1)
         
         self.extra_cfg = kwargs
         self.init_weights()
@@ -164,15 +156,9 @@ class SpliceSolo(SpliceBaseModule):
     def init_weights(self):
         # Bias final binary conv layers so initial sigmoid ≈ 0
         nn.init.constant_(self.conv_last2.bias, -5.0)
-        # nn.init.constant_(self.conv_last4.bias, -5.0)
-        # nn.init.constant_(self.conv_last6.bias, -5.0)
-        # nn.init.constant_(self.conv_last8.bias, -5.0)
     
         # Optionally init weights to zero for those layers too
         nn.init.constant_(self.conv_last2.weight, 0.0)
-        # nn.init.constant_(self.conv_last4.weight, 0.0)
-        # nn.init.constant_(self.conv_last6.weight, 0.0)
-        # nn.init.constant_(self.conv_last8.weight, 0.0)
 
     def forward(self, batch_feats):
         x = batch_feats['seq_onehot']
@@ -192,16 +178,6 @@ class SpliceSolo(SpliceBaseModule):
         skip = skip[:, :, CL: -CL]
         out1 = self.conv_last1(skip)
         out2 = self.conv_last2(skip)
-        # out1 = F.softmax(self.conv_last1(skip), dim=1)
-        # out2 = torch.sigmoid(self.conv_last2(skip))
-        # out3 = F.softmax(self.conv_last3(skip), dim=1)
-        # out4 = torch.sigmoid(self.conv_last4(skip))
-        # out5 = F.softmax(self.conv_last5(skip), dim=1)
-        # out6 = torch.sigmoid(self.conv_last6(skip))
-        # out7 = F.softmax(self.conv_last7(skip), dim=1)
-        # out8 = torch.sigmoid(self.conv_last8(skip))
-        # return torch.cat([out1, out2, out3, out4, out5, out6, out7, out8], 1)
-        # return torch.cat([out1, out2], dim=1)
         return {'cls_logits': out1, 'psi_logits': out2.squeeze(dim=1)}
 
 
@@ -356,7 +332,6 @@ class Pangolin(SpliceBaseModule):
         # out8 = torch.sigmoid(self.conv_last8(skip))
 
         # heart, liver, brain, testis
-        return {'cls_logits': torch.stack([out1, out3, out5, out7], dim=2), # (B, 2, 4, crop_size)
-                'psi_logits': torch.cat([out2, out4, out6, out8], dim=1), # (B, 4, crop_size)
+        return {'cls_logits': torch.stack([out1, out3, out5, out7], dim=2), # (B, n_classes, n_tissues, crop_size)
+                'psi_logits': torch.cat([out2, out4, out6, out8], dim=1), # (B, n_tissues, crop_size)
                 }
-        return torch.cat([out1, out2, out3, out4, out5, out6, out7, out8], 1)

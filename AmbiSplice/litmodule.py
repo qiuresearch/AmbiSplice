@@ -1,5 +1,6 @@
 import os
 import time
+import copy
 import datetime
 import pickle
 from beartype.typing import Any, Dict, Optional
@@ -24,7 +25,7 @@ from . import loss_metrics
 
 ilogger = utils.get_pylogger(__name__)
 
-def summarize_tensors(vars_dict, prefix=''):
+def peekaboo_tensors(vars_dict, prefix=''):
     """ Display variables (a dict of tensors) in a formatted table. """
     if prefix:
         print(f"\n{prefix} Variables:")
@@ -50,8 +51,8 @@ def summarize_tensors(vars_dict, prefix=''):
     print("-" * 110)
 
 
-def summarize_epoch_metrics(epoch_metrics, prefix='', logger=None, logger_prefix='val/epoch_'):
-    """ Display epoch metrics (a list of dicts) in a formatted table. """
+def peekaboo_epoch_metrics(epoch_metrics, prefix='', logger=None, logger_prefix='val/epoch_'):
+    """ Display averaged batch metrics (a list of dicts) as a table. """
 
     if not epoch_metrics or len(epoch_metrics) == 0:
         print("No epoch metrics to summarize.")
@@ -59,7 +60,7 @@ def summarize_epoch_metrics(epoch_metrics, prefix='', logger=None, logger_prefix
 
     print(f"\n{prefix} Epoch Metrics:")
 
-    avg_metrics = epoch_metrics[0]
+    avg_metrics = copy.deepcopy(epoch_metrics[0])
     for batch_metrics in epoch_metrics[1:]:
         for k, v in batch_metrics.items():
             if k in avg_metrics:
@@ -389,16 +390,16 @@ class OmniRunModule(LightningModule):
 
     def training_step(self, batch_feats, batch_idx=None):
         if self._train_steps == 0 and not self.is_child_process:
-            summarize_tensors(batch_feats, prefix='Training Step Input')
+            peekaboo_tensors(batch_feats, prefix='Training Step Input')
 
         preds = self.model(batch_feats)
         if self._train_steps == 0 and not self.is_child_process:
-            summarize_tensors(preds, prefix='Training Step Forward')
+            peekaboo_tensors(preds, prefix='Training Step Forward')
 
         loss, loss_items = self.model.calc_loss(preds, batch_feats)
         loss_items.update(self.model.calc_metric(preds, batch_feats))
         if self._train_steps == 0 and not self.is_child_process:
-            summarize_tensors(loss_items, prefix='Training Step Metrics')
+            peekaboo_tensors(loss_items, prefix='Training Step Metrics')
         
         self.log("train/loss", loss, prog_bar=True)
         self.train_epoch_metrics.append(loss_items)
@@ -425,7 +426,7 @@ class OmniRunModule(LightningModule):
         # self.log("trainer/epoch", self.current_epoch, prog_bar=False, logger=True)
 
         if len(self.train_epoch_metrics) > 0 and not self.is_child_process:
-            summarize_epoch_metrics(
+            peekaboo_epoch_metrics(
                 self.train_epoch_metrics,
                 prefix='Training',
                 logger=self._log_scalar,
@@ -438,18 +439,18 @@ class OmniRunModule(LightningModule):
 
     def validation_step(self, batch_feats, batch_idx=None):
         if self._validation_steps == 0 and not self.is_child_process:
-            summarize_tensors(batch_feats, prefix='Validation Step Input')
+            peekaboo_tensors(batch_feats, prefix='Validation Step Input')
 
         preds = self.model(batch_feats)
 
         if self._validation_steps == 0 and not self.is_child_process:
-            summarize_tensors(preds, prefix='Validation Step Forward')
+            peekaboo_tensors(preds, prefix='Validation Step Forward')
 
         loss, loss_items = self.model.calc_loss(preds, batch_feats)
         loss_items.update(self.model.calc_metric(preds, batch_feats))
 
         if self._validation_steps == 0 and not self.is_child_process:
-            summarize_tensors(loss_items, prefix='Validation Step Metrics')
+            peekaboo_tensors(loss_items, prefix='Validation Step Metrics')
 
         self.log("val/loss", loss, prog_bar=True)
         self.validation_epoch_metrics.append(loss_items)
@@ -470,7 +471,7 @@ class OmniRunModule(LightningModule):
         self._epoch_start_time = time.time()
 
         if len(self.validation_epoch_metrics) > 0 and not self.is_child_process:
-            summarize_epoch_metrics(
+            peekaboo_epoch_metrics(
                 self.validation_epoch_metrics,
                 prefix='Validation',
                 logger=self._log_scalar,
@@ -482,16 +483,16 @@ class OmniRunModule(LightningModule):
 
     def test_step(self, batch_feats, batch_idx=None):
         if self._test_steps == 0:
-            summarize_tensors(batch_feats, prefix='Test Step Input')
+            peekaboo_tensors(batch_feats, prefix='Test Step Input')
             
         preds = self.model(batch_feats)
         if self._test_steps == 0:
-            summarize_tensors(preds, prefix='Test Step Output')
+            peekaboo_tensors(preds, prefix='Test Step Output')
 
         loss, loss_items = self.model.calc_loss(preds, batch_feats)
         loss_items.update(self.model.calc_metric(preds, batch_feats))
         if self._test_steps == 0:
-            summarize_tensors(loss_items, prefix='Test Loss Items')
+            peekaboo_tensors(loss_items, prefix='Test Loss Items')
 
         self.log("test/loss", loss, prog_bar=True)
         self.test_epoch_metrics.append(loss_items)
@@ -515,7 +516,7 @@ class OmniRunModule(LightningModule):
         self._epoch_start_time = time.time()
 
         if len(self.test_epoch_metrics) > 0 and not self.is_child_process:
-            summarize_epoch_metrics(
+            peekaboo_epoch_metrics(
                 self.test_epoch_metrics,
                 prefix='Test',
                 logger=self._log_scalar,
@@ -532,26 +533,26 @@ class OmniRunModule(LightningModule):
     
     def predict_step(self, batch_feats, batch_idx=None):
         if self._predict_steps == 0:
-            summarize_tensors(batch_feats, prefix='Predict Step Input')
+            peekaboo_tensors(batch_feats, prefix='Predict Step Input')
 
         preds = self.model(batch_feats)
         self.model.preds_to_labels(preds)
         if self._predict_steps == 0:
-            summarize_tensors(preds, prefix='Predict Step Output')
+            peekaboo_tensors(preds, prefix='Predict Step Output')
 
         loss, loss_items = self.model.calc_loss(preds, batch_feats)
         loss_items.update(self.model.calc_metric(preds, batch_feats))
         if loss_items:
             self.predict_epoch_metrics.append(loss_items)
             if self._predict_steps == 0:
-                summarize_tensors(loss_items, prefix='Predict Step Metrics')
+                peekaboo_tensors(loss_items, prefix='Predict Step Metrics')
 
         self._predict_steps += 1
         return (batch_feats, preds)
 
     def on_predict_epoch_end(self):
         if len(self.predict_epoch_metrics) > 0 and not self.is_child_process:
-            summarize_epoch_metrics(
+            peekaboo_epoch_metrics(
                 self.predict_epoch_metrics,
                 prefix='Predict',
                 logger=None,
