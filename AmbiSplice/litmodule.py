@@ -25,31 +25,6 @@ from . import loss_metrics
 
 ilogger = utils.get_pylogger(__name__)
 
-def peekaboo_tensors(vars_dict, prefix=''):
-    """ Display variables (a dict of tensors) in a formatted table. """
-    if prefix:
-        print(f"\n{prefix} Variables:")
-    else:
-        print("\nVariables:")
-
-    print(f"{'Key':<20} {'Type':<20} {'Shape':<25} {'Dtype':<15} {'Device':<15} {'Requires Grad':<15}")
-    print("-" * 110)
-    for k, v in vars_dict.items():
-        if isinstance(v, torch.Tensor):
-            vtype = "Tensor"
-            shape = str(tuple(v.shape))
-            dtype = str(v.dtype)
-            device = str(v.device)
-            requires_grad = str(v.requires_grad)
-        else:
-            vtype = type(v).__name__
-            shape = str(tuple(v.shape)) if hasattr(v, 'shape') else f'({len(v)})' if isinstance(v, (list, tuple)) else "-"
-            dtype = str(v.dtype) if hasattr(v, 'dtype') else "-"
-            device = "-"
-            requires_grad = "-"
-        print(f"{k:<20} {vtype:<20} {shape:<25} {dtype:<15} {device:<15} {requires_grad:<15}")
-    print("-" * 110)
-
 
 def peekaboo_epoch_metrics(epoch_metrics, prefix='', logger=None, logger_prefix='val/epoch_'):
     """ Display averaged batch metrics (a list of dicts) as a table. """
@@ -91,11 +66,34 @@ def save_epoch_metrics(epoch_metrics, save_path):
         print("No epoch metrics to save.")
         return
 
+    if not os.path.exists(os.path.dirname(save_path)):
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        
     with open(save_path, 'w') as f:
         keys = list(epoch_metrics[0].keys())
         f.write(','.join(keys) + '\n')
         for batch_metrics in epoch_metrics:
             f.write(','.join(str(batch_metrics[k].item()) for k in keys) + '\n')
+
+
+def save_model_outputs(feats, preds, save_path, pruning=True):
+    """ Save model outputs (features and predictions) to a file. """
+    if not os.path.exists(os.path.dirname(save_path)):
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+
+    if pruning:
+        feats = feats.copy()
+        preds = preds.copy()
+        if 'seq_onehot' in feats:
+            feats.pop('seq_onehot')
+        if 'cls_logits' in preds and 'cls' in preds:
+            preds.pop('cls')
+        if 'psi_logits' in preds and 'psi' in preds:
+            preds.pop('psi')
+
+    ilogger.info(f"Saving model outputs to {save_path} ...")
+    torch.save((feats, preds), save_path)
+    ilogger.info(f"Model outputs saved to {save_path}")
 
 
 def has_wandb_connectivity(host="api.wandb.ai", port=443, timeout=2.0):
@@ -390,16 +388,16 @@ class OmniRunModule(LightningModule):
 
     def training_step(self, batch_feats, batch_idx=None):
         if self._train_steps == 0 and not self.is_child_process:
-            peekaboo_tensors(batch_feats, prefix='Training Step Input')
+            utils.peekaboo_tensors(batch_feats, prefix='Training Step Input')
 
         preds = self.model(batch_feats)
         if self._train_steps == 0 and not self.is_child_process:
-            peekaboo_tensors(preds, prefix='Training Step Forward')
+            utils.peekaboo_tensors(preds, prefix='Training Step Forward')
 
         loss, loss_items = self.model.calc_loss(preds, batch_feats)
         loss_items.update(self.model.calc_metric(preds, batch_feats))
         if self._train_steps == 0 and not self.is_child_process:
-            peekaboo_tensors(loss_items, prefix='Training Step Metrics')
+            utils.peekaboo_tensors(loss_items, prefix='Training Step Metrics')
         
         self.log("train/loss", loss, prog_bar=True)
         self.train_epoch_metrics.append(loss_items)
@@ -439,18 +437,18 @@ class OmniRunModule(LightningModule):
 
     def validation_step(self, batch_feats, batch_idx=None):
         if self._validation_steps == 0 and not self.is_child_process:
-            peekaboo_tensors(batch_feats, prefix='Validation Step Input')
+            utils.peekaboo_tensors(batch_feats, prefix='Validation Step Input')
 
         preds = self.model(batch_feats)
 
         if self._validation_steps == 0 and not self.is_child_process:
-            peekaboo_tensors(preds, prefix='Validation Step Forward')
+            utils.peekaboo_tensors(preds, prefix='Validation Step Forward')
 
         loss, loss_items = self.model.calc_loss(preds, batch_feats)
         loss_items.update(self.model.calc_metric(preds, batch_feats))
 
         if self._validation_steps == 0 and not self.is_child_process:
-            peekaboo_tensors(loss_items, prefix='Validation Step Metrics')
+            utils.peekaboo_tensors(loss_items, prefix='Validation Step Metrics')
 
         self.log("val/loss", loss, prog_bar=True)
         self.validation_epoch_metrics.append(loss_items)
@@ -483,16 +481,16 @@ class OmniRunModule(LightningModule):
 
     def test_step(self, batch_feats, batch_idx=None):
         if self._test_steps == 0:
-            peekaboo_tensors(batch_feats, prefix='Test Step Input')
+            utils.peekaboo_tensors(batch_feats, prefix='Test Step Input')
             
         preds = self.model(batch_feats)
         if self._test_steps == 0:
-            peekaboo_tensors(preds, prefix='Test Step Output')
+            utils.peekaboo_tensors(preds, prefix='Test Step Output')
 
         loss, loss_items = self.model.calc_loss(preds, batch_feats)
         loss_items.update(self.model.calc_metric(preds, batch_feats))
         if self._test_steps == 0:
-            peekaboo_tensors(loss_items, prefix='Test Loss Items')
+            utils.peekaboo_tensors(loss_items, prefix='Test Loss Items')
 
         self.log("test/loss", loss, prog_bar=True)
         self.test_epoch_metrics.append(loss_items)
@@ -533,19 +531,19 @@ class OmniRunModule(LightningModule):
     
     def predict_step(self, batch_feats, batch_idx=None):
         if self._predict_steps == 0:
-            peekaboo_tensors(batch_feats, prefix='Predict Step Input')
+            utils.peekaboo_tensors(batch_feats, prefix='Predict Step Input')
 
         preds = self.model(batch_feats)
         self.model.preds_to_labels(preds)
         if self._predict_steps == 0:
-            peekaboo_tensors(preds, prefix='Predict Step Output')
+            utils.peekaboo_tensors(preds, prefix='Predict Step Output')
 
         loss, loss_items = self.model.calc_loss(preds, batch_feats)
         loss_items.update(self.model.calc_metric(preds, batch_feats))
         if loss_items:
             self.predict_epoch_metrics.append(loss_items)
             if self._predict_steps == 0:
-                peekaboo_tensors(loss_items, prefix='Predict Step Metrics')
+                utils.peekaboo_tensors(loss_items, prefix='Predict Step Metrics')
 
         self._predict_steps += 1
         return (batch_feats, preds)
@@ -703,9 +701,7 @@ class OmniRunModule(LightningModule):
         
         if save_prefix and not self.is_child_process:
             save_path = f"{save_prefix}_eval_outputs.pt"
-            ilogger.info(f"Saving outputs to {save_path} ...")
-            torch.save((eval_feats, eval_preds), save_path)
-            ilogger.info(f"Outputs saved to {save_path}")
+            save_model_outputs(eval_feats, eval_preds, save_path, pruning=True)
 
         ilogger.info("Calculating summary metrics ...")
         sum_metrics = loss_metrics.calc_benchmark(eval_preds, eval_feats, keep_batchdim=False)
@@ -759,9 +755,7 @@ class OmniRunModule(LightningModule):
 
         if save_prefix is not None and not self.is_child_process:
             save_path = f"{save_prefix}_pred_outputs.pt"
-            ilogger.info(f"Saving predict outputs to {save_path} ...")
-            torch.save((input_feats, pred_targets), save_path)
-            ilogger.info(f"Predict outputs saved to {save_path}")
+            save_model_outputs(input_feats, pred_targets, save_path, pruning=True)
             
             if self.predict_epoch_metrics and len(self.predict_epoch_metrics) > 0:
                 metrics_path = f"{save_prefix}_batch_metrics.csv"

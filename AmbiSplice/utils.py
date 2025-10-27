@@ -124,3 +124,29 @@ def flatten_dict(raw_dict):
         else:
             flattened.append((k, v))
     return flattened
+
+
+def peekaboo_tensors(vars_dict, prefix=''):
+    """ Display variables (a dict of tensors) in a formatted table. """
+    if prefix:
+        print(f"\n{prefix} Variables:")
+    else:
+        print("\nVariables:")
+
+    print(f"{'Key':<20} {'Type':<20} {'Shape':<25} {'Dtype':<15} {'Device':<15} {'Requires Grad':<15}")
+    print("-" * 110)
+    for k, v in vars_dict.items():
+        if isinstance(v, torch.Tensor):
+            vtype = "Tensor"
+            shape = str(tuple(v.shape))
+            dtype = str(v.dtype)
+            device = str(v.device)
+            requires_grad = str(v.requires_grad)
+        else:
+            vtype = type(v).__name__
+            shape = str(tuple(v.shape)) if hasattr(v, 'shape') else f'({len(v)})' if isinstance(v, (list, tuple)) else "-"
+            dtype = str(v.dtype) if hasattr(v, 'dtype') else "-"
+            device = "-"
+            requires_grad = "-"
+        print(f"{k:<20} {vtype:<20} {shape:<25} {dtype:<15} {device:<15} {requires_grad:<15}")
+    print("-" * 110)

@@ -61,8 +61,14 @@ def get_torch_model(model_cfg: omegaconf.DictConfig):
         torch_model = models.PangolinSolo(L=L, W=W, AR=AR, **model_cfg)
     elif model_cfg.type.upper() == 'PangolinOmni'.upper():
         torch_model = models.PangolinOmni(L=L, W=W, AR=AR, **model_cfg)
+    elif model_cfg.type.upper() == 'PangolinOmni2'.upper():
+        torch_model = models.PangolinOmni2(L=L, W=W, AR=AR, **model_cfg)
     else:
-        raise ValueError(f"Unknown model type: {model_cfg.type}")
+        if hasattr(models, model_cfg.type):
+            model_class = getattr(models, model_cfg.type)
+            torch_model = model_class(L=L, W=W, AR=AR, CL=CL, **model_cfg)
+        else:
+            raise ValueError(f"Unknown model type: {model_cfg.type}")
 
     ilogger.info(f"Initialized model {model_cfg.type} with config:\n{omegaconf.OmegaConf.to_yaml(model_cfg)}")
 

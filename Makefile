@@ -1,15 +1,18 @@
 .ONESHELL:
 SHELL := /bin/bash
 .DEFAULT_GOAL := help
-debug?=false
+# .PHONY: all help clean test_pangolin test_human pangolin_test
+# This tells make to always run the recipe for the requested targets,
+# regardless of whether a file with that name exists, thus no needs for .PHONY declaration.
+MAKEFLAGS += --always-make
 
 # Use ENV_VAR if set, otherwise default to "default_value"
-# ENV_VAR ?= default_value
 CONDA_PREFIX?=$(HOME)/miniconda3
-CONDA_SH_PATH=$(CONDA_PREFIX)/etc/profile.d/conda.sh
-CONDA_ENV_NAME=ambisplice
+CONDA_SH_PATH?=$(CONDA_PREFIX)/etc/profile.d/conda.sh
+CONDA_ENV_NAME?=ambisplice
 
-.PHONY: all help clean test_pangolin test_human pangolin_test
+debug?=false
+predict_size?=20000
 
 help: ## Display this help message
 	@echo "Usage: make <target>"
@@ -17,7 +20,7 @@ help: ## Display this help message
 	@echo "Available targets:"
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-42s\033[0m %s\n", $$1, $$2}'
 
-install: ## Install dependencies
+install: ## Install python dependencies under conda environment
 	source $(CONDA_SH_PATH)
 	conda create -n $(CONDA_ENV_NAME) python=3.11 -y
 	conda activate $(CONDA_ENV_NAME)
@@ -26,7 +29,7 @@ install: ## Install dependencies
 	pip install lightning
 	conda install -c conda-forge pandas numpy hydra-core omegaconf wandb gputil matplotlib beartype h5py pytables -y
 
-pangolin_download_genomes: ## Download Pangolin genomes
+download_pangolin_genomes: ## Download Pangolin genomes
 	# Download human and mouse genomes from Gencode (or Ensembl)
 	wget https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_49/GRCh38.primary_assembly.genome.fa.gz
 	gunzip GRCh38.primary_assembly.genome.fa.gz &
@@ -47,7 +50,27 @@ pangolin_download_genomes: ## Download Pangolin genomes
 	faidx Macaca_mulatta.Mmul_10.dna.toplevel.fa
 	faidx Rattus_norvegicus.Rnor_6.0.dna.toplevel.fa
 
-eval_pangolin_pangolin_test: ## Evaluate pangolin model on Pangolin test dataset
+eval_pangolinomni_pangolinsolo123: ## Evaluate PangolinOmni model trained on PangolinSolo123 dataset
+	ckpt_dir=checkpoints/pangolinomni.pangolinsolo123_2025-10-21_23-25-37_bsi1y0zt
+	tissues=(heart liver brain testis)
+	tissues=(liver)
+	for ((i=0; i<$${#tissues[@]}; i++)) ; do
+		conda run --no-capture-output --name $(CONDA_ENV_NAME) python -u run_ambisplice.py stage=eval \
+			save_prefix=$${ckpt_dir}/pangolin_test_$${tissues[i]} \
+			model.type=pangolinomni \
+			model.state_dict_path=null \
+			litrun.resume_from_ckpt=$${ckpt_dir}/last.ckpt \
+			dataset.type=pangolinsolo \
+			dataset.train_path=null \
+			dataset.predict_size=$(predict_size) \
+			dataset.predict_path=data/pangolin/dataset_test_1.h5 \
+			+dataset.tissue_types=[$${tissues[i]}] \
+			+dataset.tissue_embedding_path="data/tissue_avg_pca_embeddings.csv" \
+			debug=$(debug)
+		wait
+	done
+
+eval_pangolin_pangolin: ## Evaluate Pangolin model trained on Pangolin dataset (quad inputs and outputs)
 	ckpt_dir="checkpoints/pangolin.pangolin_2025-10-21_22-16-17_mnsgbck4"
 	conda run --no-capture-output --name $(CONDA_ENV_NAME) python -u run_ambisplice.py stage=eval \
 		save_prefix=$${ckpt_dir}/pangolin_test \
@@ -56,13 +79,13 @@ eval_pangolin_pangolin_test: ## Evaluate pangolin model on Pangolin test dataset
 		litrun.resume_from_ckpt=$${ckpt_dir}/last.ckpt \
 		dataset.type=pangolin \
 		dataset.train_path=null \
-		dataset.predict_size=32000 \
+		dataset.predict_size=$(predict_size) \
 		dataset.predict_path=data/pangolin/dataset_test_1.h5 \
 		+dataset.tissue_types=[heart,liver,brain,testis] \
 		debug=$(debug)
 
-eval_pangolinsolo_pangolinsolo_test: ## Evaluate pangolin model on Pangolin test dataset
-	ckpt_dir=checkpoints/PangolinSingle_Pangolin_2025-10-18_12-41-38_btn1jd24
+eval_pangolinsolo_pangolinsolo1: ## Evaluate PangolinSolo model trained on PangolinSolo heart dataset (single tissue input and output)
+	ckpt_dir=checkpoints/pangolinsolo_pangolin_2025-10-18_12-41-38_btn1jd24
 	conda run --no-capture-output --name $(CONDA_ENV_NAME) python -u run_ambisplice.py stage=eval \
 		save_prefix=$${ckpt_dir}/pangolinsolo_test4 \
 		model.type=pangolinsolo \
@@ -70,24 +93,9 @@ eval_pangolinsolo_pangolinsolo_test: ## Evaluate pangolin model on Pangolin test
 		litrun.resume_from_ckpt=$${ckpt_dir}/last.ckpt \
 		dataset.type=pangolinsolo \
 		dataset.train_path=null \
-		dataset.predict_size=null \
+		dataset.predict_size=$(predict_size) \
 		dataset.predict_path=data/pangolin/dataset_test_1.h5 \
 		+dataset.tissue_types=[testis] \
-		debug=$(debug)
-
-eval_pangolinorig_pangolin_test: ## Evaluate Pangolin original model on pangolin datasets
-	# Run Pangolin model (final.modelnum.tissue.epoch) on Pangolin dataset
-	#	dataset.predict_path=data/pangolin/dataset_train_all.h5 \
-	conda run --no-capture-output --name $(CONDA_ENV_NAME) python -u run_ambisplice.py stage=eval \
-	    save_prefix=benchmarks/pangolin_test \
-		model.type=pangolin \
-		model.state_dict_path=benchmarks/pangolin_models/final.1.0.3.v2 \
-		litrun.resume_from_ckpt=null \
-		ensemble.enable=false \
-		dataset.type=pangolin \
-		dataset.predict_path=data/pangolin/dataset_test_1.h5 \
-		dataset.predict_size=21000 \
-		+dataset.tissue_types=[heart,liver,brain,testis] \
 		debug=$(debug)
 
 eval_pangolinorig_ensemble_pangolin: ## Evaluate Pangolin ensemble average
@@ -103,7 +111,23 @@ eval_pangolinorig_ensemble_pangolin: ## Evaluate Pangolin ensemble average
 		ensemble.model.state_dict_path=[$${model_dir}/final.1.0.3.v2,$${model_dir}/final.2.0.3.v2,$${model_dir}/final.3.0.3.v2] \
 	    dataset.type=pangolin \
 		dataset.predict_path=data/pangolin/dataset_test_1.h5 \
-		dataset.predict_size=21000 \
+		dataset.predict_size=$(predict_size) \
+		+dataset.tissue_types=[heart,liver,brain,testis] \
+		debug=$(debug)
+
+eval_pangolinorig_pangolin: ## Evaluate Pangolin original model
+	# Run Pangolin model (final.modelnum.tissue.epoch) on Pangolin dataset
+	#	dataset.predict_path=data/pangolin/dataset_train_all.h5 \
+	model_name=final.1.0.3.v2
+	conda run --no-capture-output --name $(CONDA_ENV_NAME) python -u run_ambisplice.py stage=eval \
+	    save_prefix=benchmarks/pangolin_$${model_name}/pangolin_test \
+		model.type=pangolin \
+		model.state_dict_path=benchmarks/pangolin_models/$${model_name} \
+		litrun.resume_from_ckpt=null \
+		ensemble.enable=false \
+		dataset.type=pangolin \
+		dataset.predict_path=data/pangolin/dataset_test_1.h5 \
+		dataset.predict_size=$(predict_size) \
 		+dataset.tissue_types=[heart,liver,brain,testis] \
 		debug=$(debug)
 
@@ -163,6 +187,20 @@ train_pangolinomni_pangolinsolo123: ## Train PangolinOmni model on PangolinSolo 
 	conda run --no-capture-output --name $(CONDA_ENV_NAME) python -u run_ambisplice.py stage=train \
 		run_name=pangolinomni.pangolinsolo123 \
 		model.type=pangolinomni \
+		model.state_dict_path=null \
+		dataset.type=pangolinsolo \
+		dataset.train_path=data/pangolin/dataset_train_all.h5 \
+		+dataset.tissue_types=[heart,liver,brain] \
+		+dataset.tissue_embedding_path="data/tissue_avg_pca_embeddings.csv" \
+		dataloader.train_batch_size=96 \
+		dataloader.val_batch_size=128 \
+		litrun.resume_from_ckpt=null \
+		debug=$(debug)
+
+train_pangolinomni2_pangolinsolo123: ## Train PangolinOmni2 model on PangolinSolo dataset
+	conda run --no-capture-output --name $(CONDA_ENV_NAME) python -u run_ambisplice.py stage=train \
+		run_name=pangolinomni2.pangolinsolo123 \
+		model.type=pangolinomni2 \
 		model.state_dict_path=null \
 		dataset.type=pangolinsolo \
 		dataset.train_path=data/pangolin/dataset_train_all.h5 \

@@ -67,11 +67,16 @@ def topks_roc_prc_metrics(y_pred, y_true, ks=(0.5, 1, 2, 4), multiples_of_true=F
         all_metrics[key] = np.array(all_metrics[key])
 
     # auprc
+    # quantile indices
     idx_thresholds = np.linspace(0, len(y_pred) - 1, num=min(len(y_true), 101), dtype=int)
+    # linear space indices
     idx_linspace = np.array([np.searchsorted(sorted_y_pred, t, side='left') for t in np.linspace(0.01, 0.99, num=99)])
     idx_linspace = idx_linspace[(idx_linspace > 0) & (idx_linspace < len(y_pred))]
-    
-    idx_thresholds = np.sort(np.unique(np.concatenate((idx_thresholds, idx_linspace))))
+    # top-k indices
+    idx_topks = (len(sorted_y_pred) - np.linspace(0, 3, num=101, dtype=float) * len(idx_true) - 1).astype(int)
+    idx_topks = idx_topks[(idx_topks > 0) & (idx_topks < len(y_pred))]
+
+    idx_thresholds = np.sort(np.unique(np.concatenate((idx_thresholds, idx_linspace, idx_topks))))
     thresholds = np.concatenate([sorted_y_pred[idx_thresholds], [1.0]])
     idx_thresholds = np.concatenate([idx_thresholds, [len(y_true)]])
 
@@ -92,6 +97,7 @@ def topks_roc_prc_metrics(y_pred, y_true, ks=(0.5, 1, 2, 4), multiples_of_true=F
             precisions[i] = tp / (tp + fp)
         else:
             precisions[i] = 1.0
+
         if tp + fn > 0:
             recalls[i] = tp / (tp + fn)
         else:
