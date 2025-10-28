@@ -11,8 +11,9 @@ CONDA_PREFIX?=$(HOME)/miniconda3
 CONDA_SH_PATH?=$(CONDA_PREFIX)/etc/profile.d/conda.sh
 CONDA_ENV_NAME?=ambisplice
 
-debug?=false
-predict_size?=20000
+debug=false
+gpus=0
+predict_size=20000
 
 help: ## Display this help message
 	@echo "Usage: make <target>"
@@ -55,8 +56,10 @@ eval_pangolinomni_pangolinsolo123: ## Evaluate PangolinOmni model trained on Pan
 	tissues=(heart liver brain testis)
 	tissues=(liver)
 	for ((i=0; i<$${#tissues[@]}; i++)) ; do
-		conda run --no-capture-output --name $(CONDA_ENV_NAME) python -u run_ambisplice.py stage=eval \
+		conda run --no-capture-output --name $(CONDA_ENV_NAME) \
+		python -u run_ambisplice.py stage=eval \
 			infer.save_prefix=$${ckpt_dir}/pangolin_test_$${tissues[i]} \
+			infer.save_level=2 infer.split_dim=null \
 			model.type=pangolinomni \
 			model.state_dict_path=null \
 			litrun.resume_from_ckpt=$${ckpt_dir}/last.ckpt \
@@ -74,6 +77,7 @@ eval_pangolin_pangolin: ## Evaluate Pangolin model trained on Pangolin dataset (
 	ckpt_dir="checkpoints/pangolin.pangolin_2025-10-21_22-16-17_mnsgbck4"
 	conda run --no-capture-output --name $(CONDA_ENV_NAME) python -u run_ambisplice.py stage=eval \
 		infer.save_prefix=$${ckpt_dir}/pangolin_test \
+		infer.save_level=2 infer.split_dim=-2 \
 		model.type=pangolin \
 		model.state_dict_path=null \
 		litrun.resume_from_ckpt=$${ckpt_dir}/last.ckpt \
@@ -89,7 +93,7 @@ eval_pangolinsolo_pangolinsolo1: ## Evaluate PangolinSolo model trained on Pango
 	ckpt_dir=checkpoints/pangolinsolo.pangolinsolo1_2025-10-25_11-46-07_cqw6jfnv
 	tissues=(liver)
 	tissues=(heart liver brain testis)
-	for ((i=0; i<$${#tissues[@]}; i++)) ; do	
+	for ((i=0; i<$${#tissues[@]}; i++)) ; do
 		conda run --no-capture-output --name $(CONDA_ENV_NAME) python -u run_ambisplice.py stage=eval \
 			infer.save_prefix=$${ckpt_dir}/pangolin_test_$${tissues[i]} \
 			infer.save_level=2 infer.split_dim=null \
@@ -143,6 +147,7 @@ eval_pangolinorig_pangolin: ## Evaluate Pangolin original model
 train_pangolinsolo_pangolinsolo1: ## Train PangolinSolo model on PangolinSolo dataset
 	conda run --no-capture-output --name $(CONDA_ENV_NAME) python -u run_ambisplice.py stage=train \
 		run_name=pangolinsolo.pangolinsolo1 \
+		gpus=[$(gpus)] \
 		model.type=pangolinsolo \
 		model.state_dict_path=null \
 		dataset.type=pangolinsolo \
@@ -233,7 +238,8 @@ train_pangolin_pangolin: ## Train Pangolin model on Pangolin dataset (all four t
 		debug=$(debug)
 
 train_splicesolo_genecrops: ## Train SpliceSolo on genecrops dataset
-	conda run --no-capture-output --name $(CONDA_ENV_NAME) python -u run_ambisplice.py stage=train \
+	conda run --no-capture-output --name $(CONDA_ENV_NAME) \
+	python -u run_ambisplice.py stage=train \
 		model.type=SpliceSolo \
 		model.state_dict_path=null \
 		dataset.type=genecrops \
@@ -244,7 +250,9 @@ train_splicesolo_genecrops: ## Train SpliceSolo on genecrops dataset
 		debug=$(debug)
 
 train_splicesolo_genesites: ## Train SpliceSolo on gene sites dataset
-	conda run --no-capture-output --name $(CONDA_ENV_NAME) python -u run_ambisplice.py stage=train \
+	conda run --no-capture-output --name $(CONDA_ENV_NAME) \
+	python -u run_ambisplice.py stage=train \
+		gpus=[$(gpus)] \
 		model.type=splicesolo \
 		model.state_dict_path=null \
 		dataset.type=genesites \
