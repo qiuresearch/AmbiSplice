@@ -6,8 +6,10 @@ gpus: [0]
 accelerator: gpu
 run_name: ${model.type}_${dataset.type}
 project: GWSplice
-save_prefix: dummy
-save_individual: false # used for eval/test/predict only
+infer: # used for eval/test/predict only
+  save_prefix: dummy
+  save_level: 2 # 0: nothing, 1: summary metrics, 2: model outputs, 3: calc and save individual sample metrics
+  split_dim: -2 # null or a single dim for saving along this dim
 ensemble: # used for eval/test/predict only
   enable: false
   model:

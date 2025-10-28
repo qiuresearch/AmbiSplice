@@ -1,4 +1,5 @@
 import os
+from tqdm import tqdm
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -7,7 +8,7 @@ from AmbiSplice import utils
 ilogger = utils.get_pylogger(os.path.basename(__name__))
 
 
-def topks_roc_prc_metrics(y_pred, y_true, ks=(0.5, 1, 2, 4), multiples_of_true=False):
+def calc_topk_roc_prc_curves(y_pred, y_true, ks=(0.5, 1, 2, 4), multiples_of_true=False):
     """ Compute top-k accuracy, precision, recall, f1, auroc, auprc
         y_pred: 1D or 2D numpy array of predicted scores (probabilities)
         y_true: 1D or 2D numpy array of ground truth binary labels (0 or 1)
@@ -39,7 +40,7 @@ def topks_roc_prc_metrics(y_pred, y_true, ks=(0.5, 1, 2, 4), multiples_of_true=F
         if k < 1 or k > len(y_true):
             continue
 
-        if k * len(idx_true) < len(y_true):
+        if k * len(idx_true) < len(y_true): # small k 
             # tp = torch.intersect1d(argsorted_y_pred[-k:], idx_true)
             tp = torch.tensor(len(idx_true) + k - len(torch.cat([idx_true, argsorted_y_pred[-k:]]).unique()))
         else:
@@ -47,7 +48,7 @@ def topks_roc_prc_metrics(y_pred, y_true, ks=(0.5, 1, 2, 4), multiples_of_true=F
 
         metric['k'] = k
         metric['topk_threshold'] = sorted_y_pred[-k-1:-k+1].mean() if k > 1 else sorted_y_pred[-1]
-        metric['topk_accuracy'] = tp / min(k, len(idx_true))
+        metric['topk_accuracy'] = tp / min(k, len(idx_true)) # from pangolin, can we do this?
         metric['topk_precision'] = tp / k
         metric['topk_recall'] = tp / len(idx_true)
 
@@ -128,7 +129,23 @@ def topks_roc_prc_metrics(y_pred, y_true, ks=(0.5, 1, 2, 4), multiples_of_true=F
     return all_metrics
 
 
-def calc_loss(preds, labels):
+def _get_remaining_dims(excluded_dims, ndim):
+    """ excluded_dims must be a list or tuple of integers"""
+    if excluded_dims:
+        return tuple(i for i in range(ndim) if i not in excluded_dims and i - ndim not in excluded_dims)
+    else:
+        return tuple(range(ndim))
+    
+def _get_dim_index(dim, dims, ndim=None):
+    if ndim:
+        if dim < 0:
+            dim = ndim + dim
+        dims = sorted([i if i >= 0 else ndim + i for i in dims])
+
+    return dims.index(dim) if dim in dims else None
+    
+
+def calc_loss(preds, labels, exclude_dim=None):
     """ 
         labels are the ground truth in the batch_feats
     """
@@ -140,29 +157,41 @@ def calc_loss(preds, labels):
 
     loss_items = {}
     if 'cls' not in labels or 'psi' not in labels:
+        ilogger.warning("No cls or psi in labels.")
         return -1, loss_items
     
+    if exclude_dim is not None and utils.is_scalar(exclude_dim):
+        exclude_dim = [int(exclude_dim)]    
+
     # four classes: non, acceptor, donor, hybrid
     if 'cls_logits' in preds:
         loss_items['cls_loss'] = F.cross_entropy(
             preds['cls_logits'],
             labels['cls'],
-            ignore_index=-100)
+            ignore_index=-100,
+            reduction='none' if exclude_dim else 'mean',
+            )
     elif 'cls' in preds:
         loss_items['cls_loss'] = F.cross_entropy(
             torch.log(preds['cls'] + 1e-8),  # add a small value to avoid log(0)
             labels['cls'],
-            ignore_index=-100)
+            ignore_index=-100,
+            reduction='none' if exclude_dim else 'mean',
+            )
     else:
         raise ValueError("No cls or cls_logits in preds.")
 
+    if exclude_dim:
+        loss_items['cls_loss'] = loss_items['cls_loss'].mean(
+            dim=_get_remaining_dims(exclude_dim, loss_items['cls_loss'].ndim)
+        )
     # psi is a probability between 0 and 1
     if 'psi_logits' in preds:
         loss_items['psi_loss'] = F.binary_cross_entropy_with_logits(
             preds['psi_logits'],
             labels['psi'],
             weight=labels['psi'] >= 0,  # mask out negative values
-            reduction='mean')
+            reduction='none' if exclude_dim else 'mean')
     elif 'psi' in preds:
         psi_label = labels['psi'].float()
         weight = (psi_label >= 0).float()  # mask out negative values
@@ -172,42 +201,58 @@ def calc_loss(preds, labels):
             preds['psi'].float(),
             psi_label,
             weight=weight,
-            reduction='mean')
+            reduction='none' if exclude_dim else 'mean')
     else:
         raise ValueError("No psi or psi_logits in preds.")
+
+    if exclude_dim:
+        loss_items['psi_loss'] = loss_items['psi_loss'].mean(
+            dim=_get_remaining_dims(exclude_dim, loss_items['psi_loss'].ndim)
+        )
 
     loss = loss_items['cls_loss'] + loss_items['psi_loss']
     loss_items['loss'] = loss
 
-    for k in loss_items: # do not move to cpu here, let the caller do it
-        loss_items[k] = loss_items[k].detach() 
+    for k in loss_items:
+        loss_items[k] = loss_items[k].cpu().numpy()
 
     return loss, loss_items
 
 
-def calc_metric(preds, labels, keep_batchdim=False, to_numpy=True, eps=1e-8):
+def calc_metric(preds, labels, C_dim=1, exclude_dim=None, to_numpy=True, eps=1e-8):
     """ preds are the output of forward() without any activation
         labels are the ground truth in the batch_feats
+    Args:
+        C_dim: the dimension of classes in preds['cls'], default is 1 (B, C, ..., L)
+               preds['psi'] and labels['psi'] have NO C_dim as they are scalar regression!!!
+        exclude_dim: list of dimensions to exclude when computing metrics, e.g., batch dimension
+        to_numpy: whether to convert the output metrics to numpy arrays
     """
     metric_items = {}
     if 'cls' not in labels or 'psi' not in labels:
         return metric_items
 
+    if exclude_dim is None or exclude_dim is False:
+        exclude_dim = []
+    else:
+        if utils.is_scalar(exclude_dim):
+            exclude_dim = [int(exclude_dim)]
+    assert C_dim not in exclude_dim, "C_dim cannot be in exclude_dim."
+
     # compute precision, recall, f1 for cls
-    # cls_logits in (B, num_classes, crop_size)
+
+    # cls_logits in (B, num_classes/num_channels, crop_size)
     if 'cls' in preds:
-        cls_pred = torch.movedim(preds['cls'], 1, -1)
+        cls_pred = preds['cls']
     elif 'cls_logits' in preds:
-        cls_pred = F.softmax(torch.movedim(preds['cls_logits'], 1, -1), dim=-1)  # (B, crop_size, num_classes)
+        cls_pred = F.softmax(preds['cls_logits'], dim=C_dim)
     else:
         raise ValueError("No cls or cls_logits in preds.")
-        
-    cls_label = F.one_hot(labels['cls'], num_classes=cls_pred.shape[-1]).to(cls_pred.dtype)  # (B, crop_size, num_classes)
 
-    if keep_batchdim:
-        dims_to_sum = tuple(range(1, cls_pred.ndim - 1))  # sum over all but batch and last dimension
-    else:
-        dims_to_sum = tuple(range(cls_pred.ndim - 1))  # sum over all but last dimension
+    cls_label = torch.movedim(F.one_hot(labels['cls'], num_classes=cls_pred.shape[C_dim]), -1, C_dim)
+
+    dims_to_sum = _get_remaining_dims(exclude_dim + [C_dim], cls_pred.ndim)
+    C_dim_new = _get_dim_index(C_dim, exclude_dim + [C_dim], ndim=cls_pred.ndim)
 
     # print(cls_pred.shape, cls_label.shape, dims_to_sum)
 
@@ -219,14 +264,9 @@ def calc_metric(preds, labels, keep_batchdim=False, to_numpy=True, eps=1e-8):
     cls_recall = cls_tp / (cls_tp + cls_fn + eps)
     cls_f1 = 2 * cls_precision * cls_recall / (cls_precision + cls_recall + eps)
 
-    if keep_batchdim:
-        dims_to_mean = tuple(range(1, cls_f1.ndim))  # average over all but batch dimension
-    else:
-        dims_to_mean = tuple(range(cls_f1.ndim))  # average over all dimensions
-
-    metric_items['cls_precision'] = cls_precision.mean(dim=dims_to_mean)
-    metric_items['cls_recall'] = cls_recall.mean(dim=dims_to_mean)
-    metric_items['cls_f1'] = cls_f1.mean(dim=dims_to_mean)
+    metric_items['cls_precision'] = cls_precision.mean(dim=C_dim_new)
+    metric_items['cls_recall'] = cls_recall.mean(dim=C_dim_new)
+    metric_items['cls_f1'] = cls_f1.mean(dim=C_dim_new)
 
     # compute mse for psi
     if 'psi' in preds:
@@ -236,9 +276,11 @@ def calc_metric(preds, labels, keep_batchdim=False, to_numpy=True, eps=1e-8):
     else:
         raise ValueError("No psi or psi_logits in preds.")
 
-    metric_items['psi_mse'] = F.mse_loss(psi_pred, labels['psi'], reduction='none' if keep_batchdim else 'mean')
-    if keep_batchdim:
-        metric_items['psi_mse'] = metric_items['psi_mse'].mean(dim=tuple(range(1, metric_items['psi_mse'].ndim)))
+    metric_items['psi_mse'] = F.mse_loss(psi_pred, labels['psi'], reduction='none' if exclude_dim else 'mean')
+    if exclude_dim:
+        metric_items['psi_mse'] = metric_items['psi_mse'].mean(
+            dim=_get_remaining_dims(exclude_dim, metric_items['psi_mse'].ndim)
+        )
 
     if to_numpy:
         for key in metric_items:
@@ -247,44 +289,56 @@ def calc_metric(preds, labels, keep_batchdim=False, to_numpy=True, eps=1e-8):
     return metric_items
 
 
-def calc_benchmark(preds, labels, keep_batchdim=True, eps=1e-8):
+def calc_benchmark(preds, labels, C_dim=1, exclude_dim=None, eps=1e-8):
     """ preds are the output of forward() without any activation
         labels are the ground truth in the batch_feats
-        
-        Caution: the channel dimension of preds['cls'] should be the second dimension
+    Args:
+        C_dim: the dimension of classes in preds['cls'], default is 1 (B, C, ..., L)
+        exclude_dim: list of dimensions to exclude when computing metrics, e.g., batch dimension
+        eps: small value to avoid division by zero
+    Returns:
+        all_metrics: dict of metrics, each value is a scalar or a numpy array
     """
-    ilogger.info("Calculating loss metrics...")
-    loss, benchmark_metrics = calc_loss(preds, labels)
-    ilogger.info("Calculating eval metrics...")
-    benchmark_metrics.update(calc_metric(preds, labels, keep_batchdim=keep_batchdim, to_numpy=True, eps=eps))
+    if exclude_dim is not None and utils.is_scalar(exclude_dim):
+        exclude_dim = [int(exclude_dim)]
 
-    ilogger.info("Calculating ROC and PRC metrics...")
-    if keep_batchdim:
-        batch_size = labels['cls'].shape[0]
-        for i in range(batch_size):
-            y_pred = (preds['cls'][i].argmax(dim=1).flatten() > 0.5).to(torch.float32)
+    if exclude_dim:
+        assert len(exclude_dim) == 1, "Only support excluding one dimension for individual metrics."
+        dim_size = labels['cls'].shape[exclude_dim[0]]
+
+        _, all_metrics = calc_loss(preds, labels, exclude_dim=exclude_dim)
+        all_metrics.update(calc_metric(preds, labels, exclude_dim=exclude_dim, to_numpy=True, eps=eps))
+
+        for i in tqdm(range(dim_size), total=dim_size, desc="Calculating per-sample metrics"):
+            y_pred = (preds['cls'][i].argmax(dim=0).flatten() > 0.5).to(torch.float32)
             y_true = (labels['cls'][i].flatten() > 0.5).to(torch.float32)
-            metric = topks_roc_prc_metrics(y_pred, y_true, ks=(0.5, 1, 2, 4), multiples_of_true=True)
+            metric = calc_topk_roc_prc_curves(y_pred, y_true, ks=(0.5, 1, 2, 4), multiples_of_true=True)
             if metric is None:
                 continue
             # only collect scalar metrics
             for key in metric:
                 if hasattr(metric[key], '__len__') and len(metric[key]) > 1:
                     continue
-                if key in benchmark_metrics:
-                    benchmark_metrics[key].append(metric[key])
+                if key in all_metrics:
+                    all_metrics[key].append(metric[key])
                 else:
-                    benchmark_metrics[key] = [metric[key]]
+                    all_metrics[key] = [metric[key]]
         # convert lists to numpy arrays
-        for key in benchmark_metrics:
-            if isinstance(benchmark_metrics[key], list):
-                benchmark_metrics[key] = np.array(benchmark_metrics[key])
+        for key in all_metrics:
+            if isinstance(all_metrics[key], list):
+                all_metrics[key] = np.array(all_metrics[key])
     else:
-        y_pred = (preds['cls'].argmax(dim=1).flatten() > 0.5).to(torch.float32)
-        y_true = (labels['cls'].flatten() > 0.5).to(torch.float32)
-        benchmark_metrics.update(topks_roc_prc_metrics(y_pred, y_true, ks=(0.5, 1, 2, 4), multiples_of_true=True))
+        ilogger.info("Calculating aggregate loss and metrics ...")
+        _, all_metrics = calc_loss(preds, labels)
+        all_metrics.update(calc_metric(preds, labels, exclude_dim=None, to_numpy=True, eps=eps))        
 
-    return benchmark_metrics
+        ilogger.info("Calculating ROC and PRC metrics...")
+        y_pred = (preds['cls'].argmax(dim=C_dim).flatten() > 0.5).to(torch.float32)
+        y_true = (labels['cls'].flatten() > 0.5).to(torch.float32)
+        all_metrics.update(calc_topk_roc_prc_curves(y_pred, y_true, ks=(0.5, 1, 2, 4), multiples_of_true=True))
+        all_metrics['num_samples'] = labels['cls'].shape[0]
+
+    return all_metrics
 
 
 def save_summary_metrics(metrics, save_path):
@@ -295,8 +349,8 @@ def save_summary_metrics(metrics, save_path):
     pass
 
 
-def save_individual_metrics(metrics, save_path):
-    """ Save individual metrics to a CSV file without Pandas.
+def save_sample_metrics(metrics, save_path):
+    """ Save individual sample metrics to a CSV file without Pandas.
         metrics: list of dicts, each dict contains metrics for a batch
         save_path: path to save the CSV file
     """

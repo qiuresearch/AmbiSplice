@@ -46,6 +46,8 @@ def get_pylogger(name=__name__) -> logging.Logger:
 
 
 def is_scalar(v):
+    # if v is None or v is False:
+        # return False
     if np.isscalar(v):
         return True
     if isinstance(v, np.ndarray) and v.ndim == 0:

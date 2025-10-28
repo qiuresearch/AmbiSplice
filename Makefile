@@ -56,7 +56,7 @@ eval_pangolinomni_pangolinsolo123: ## Evaluate PangolinOmni model trained on Pan
 	tissues=(liver)
 	for ((i=0; i<$${#tissues[@]}; i++)) ; do
 		conda run --no-capture-output --name $(CONDA_ENV_NAME) python -u run_ambisplice.py stage=eval \
-			save_prefix=$${ckpt_dir}/pangolin_test_$${tissues[i]} \
+			infer.save_prefix=$${ckpt_dir}/pangolin_test_$${tissues[i]} \
 			model.type=pangolinomni \
 			model.state_dict_path=null \
 			litrun.resume_from_ckpt=$${ckpt_dir}/last.ckpt \
@@ -73,7 +73,7 @@ eval_pangolinomni_pangolinsolo123: ## Evaluate PangolinOmni model trained on Pan
 eval_pangolin_pangolin: ## Evaluate Pangolin model trained on Pangolin dataset (quad inputs and outputs)
 	ckpt_dir="checkpoints/pangolin.pangolin_2025-10-21_22-16-17_mnsgbck4"
 	conda run --no-capture-output --name $(CONDA_ENV_NAME) python -u run_ambisplice.py stage=eval \
-		save_prefix=$${ckpt_dir}/pangolin_test \
+		infer.save_prefix=$${ckpt_dir}/pangolin_test \
 		model.type=pangolin \
 		model.state_dict_path=null \
 		litrun.resume_from_ckpt=$${ckpt_dir}/last.ckpt \
@@ -85,24 +85,32 @@ eval_pangolin_pangolin: ## Evaluate Pangolin model trained on Pangolin dataset (
 		debug=$(debug)
 
 eval_pangolinsolo_pangolinsolo1: ## Evaluate PangolinSolo model trained on PangolinSolo heart dataset (single tissue input and output)
-	ckpt_dir=checkpoints/pangolinsolo_pangolin_2025-10-18_12-41-38_btn1jd24
-	conda run --no-capture-output --name $(CONDA_ENV_NAME) python -u run_ambisplice.py stage=eval \
-		save_prefix=$${ckpt_dir}/pangolinsolo_test4 \
-		model.type=pangolinsolo \
-		model.state_dict_path=null \
-		litrun.resume_from_ckpt=$${ckpt_dir}/last.ckpt \
-		dataset.type=pangolinsolo \
-		dataset.train_path=null \
-		dataset.predict_size=$(predict_size) \
-		dataset.predict_path=data/pangolin/dataset_test_1.h5 \
-		+dataset.tissue_types=[testis] \
-		debug=$(debug)
+# 	ckpt_dir=checkpoints/pangolinsolo_pangolin_2025-10-18_12-41-38_btn1jd24
+	ckpt_dir=checkpoints/pangolinsolo.pangolinsolo1_2025-10-25_11-46-07_cqw6jfnv
+	tissues=(liver)
+	tissues=(heart liver brain testis)
+	for ((i=0; i<$${#tissues[@]}; i++)) ; do	
+		conda run --no-capture-output --name $(CONDA_ENV_NAME) python -u run_ambisplice.py stage=eval \
+			infer.save_prefix=$${ckpt_dir}/pangolin_test_$${tissues[i]} \
+			infer.save_level=2 infer.split_dim=null \
+			model.type=pangolinsolo \
+			model.state_dict_path=null \
+			litrun.resume_from_ckpt=$${ckpt_dir}/last.ckpt \
+			dataset.type=pangolinsolo \
+			dataset.train_path=null \
+			dataset.predict_size=$(predict_size) \
+			dataset.predict_path=data/pangolin/dataset_test_1.h5 \
+			+dataset.tissue_types=[$${tissues[i]}] \
+			debug=$(debug)
+		wait
+	done
 
-eval_pangolinorig_ensemble_pangolin: ## Evaluate Pangolin ensemble average
+eval_pangolinorig_ensemble_pangolin: ## Evaluate Pangolin original ensemble average
 	# Run Pangolin model (final.modelnum.tissue.epoch) on Pangolin dataset
 	model_dir=benchmarks/pangolin_models
 	conda run --no-capture-output --name $(CONDA_ENV_NAME) python -u run_ambisplice.py stage=eval \
-	    save_prefix=benchmarks/pangolin_ens_test \
+	    infer.save_prefix=benchmarks/pangolin_ensemble/pangolin_test \
+		infer.save_level=2 infer.split_dim=-2 \
 		model.type=pangolin \
 		model.state_dict_path=null \
 		litrun.resume_from_ckpt=null \
@@ -118,9 +126,10 @@ eval_pangolinorig_ensemble_pangolin: ## Evaluate Pangolin ensemble average
 eval_pangolinorig_pangolin: ## Evaluate Pangolin original model
 	# Run Pangolin model (final.modelnum.tissue.epoch) on Pangolin dataset
 	#	dataset.predict_path=data/pangolin/dataset_train_all.h5 \
-	model_name=final.1.0.3.v2
+	model_name=final.3.0.3.v2
 	conda run --no-capture-output --name $(CONDA_ENV_NAME) python -u run_ambisplice.py stage=eval \
-	    save_prefix=benchmarks/pangolin_$${model_name}/pangolin_test \
+	    infer.save_prefix=benchmarks/pangolin_$${model_name}/pangolin_test \
+		infer.save_level=2 infer.split_dim=-2 \
 		model.type=pangolin \
 		model.state_dict_path=benchmarks/pangolin_models/$${model_name} \
 		litrun.resume_from_ckpt=null \

@@ -6,6 +6,7 @@ import pickle
 from beartype.typing import Any, Dict, Optional
 from omegaconf import DictConfig, OmegaConf
 import socket
+from tqdm import tqdm
 import wandb
 
 import gc
@@ -19,6 +20,8 @@ from pytorch_lightning.callbacks import ModelCheckpoint, Timer, LearningRateMoni
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from pytorch_lightning.callbacks import RichProgressBar
 from pytorch_lightning.callbacks import TQDMProgressBar
+
+from AmbiSplice import visuals
 
 from . import utils
 from . import loss_metrics
@@ -94,6 +97,61 @@ def save_model_outputs(feats, preds, save_path, pruning=True):
     ilogger.info(f"Saving model outputs to {save_path} ...")
     torch.save((feats, preds), save_path)
     ilogger.info(f"Model outputs saved to {save_path}")
+
+
+def save_eval_results(feats, preds, save_prefix=None, save_level=2, split_dim=None, pruning=True):
+    """ Save evaluation outputs and metrics.
+    Args:
+        feats: dict of tensors, ground truth features/labels
+        preds: dict of tensors, model predictions
+        save_prefix: str, prefix for saving files
+        save_level: int, level of saving detail (0: none, 1: agg metrics, 2: outputs + agg metrics, 3: individual metrics)
+        split_dim: int, dimension to split individual outputs for visualization only
+        pruning: bool, whether to prune large tensors before saving
+    """
+
+    if save_level >= 2 and save_prefix:
+        save_path = f"{save_prefix}_eval_outputs.pt"
+        save_model_outputs(feats, preds, save_path, pruning=True)
+
+    ilogger.info("Calculating aggregate metrics ...")
+    agg_metrics = loss_metrics.calc_benchmark(preds, feats, exclude_dim=None)
+
+    if save_level >= 1 and save_prefix:
+        metrics_path = f"{save_prefix}_agg_metrics.yaml"
+        utils.to_yaml(agg_metrics, yaml_path=metrics_path)
+        ilogger.info(f"Aggregate metrics saved to {metrics_path}")
+        visuals.plot_agg_metrics(agg_metrics, save_prefix=save_prefix+'_agg_metrics', display=False)
+
+    if save_level >= 3 and save_prefix:
+        ilogger.info("Calculating individual sample metrics ...")
+        sam_metrics = loss_metrics.calc_benchmark(preds, feats, exclude_dim=[0])
+
+        metrics_path = f"{save_prefix}_ind_metrics.csv"
+        ilogger.info(f"Saving individual sample metrics to {metrics_path} ...")
+        loss_metrics.save_sample_metrics(sam_metrics, metrics_path)
+        ilogger.info(f"Individual sample metrics saved to {metrics_path}")
+    else:
+        sam_metrics = None
+
+    if save_prefix and split_dim is not None:
+        dim_size = preds['cls_logits'].shape[split_dim]
+        for i in tqdm(range(dim_size), total=dim_size, desc=f"Saving eval outputs for dim {split_dim} ..."):
+            dim_preds = {'cls_logits': preds['cls_logits'].select(split_dim, i),
+                        'psi_logits': preds['psi_logits'].select(split_dim, i),
+                        'cls': preds['cls'].select(split_dim, i),
+                        'psi': preds['psi'].select(split_dim, i),
+                        }
+            dim_labels = {'cls': feats['cls'].select(split_dim, i),
+                        'psi': feats['psi'].select(split_dim, i),
+                        }
+            agg_metrics = loss_metrics.calc_benchmark(dim_preds, dim_labels, exclude_dim=None)
+            metrics_path = f"{save_prefix}_agg_metrics_dim{i}.yaml"
+            utils.to_yaml(agg_metrics, yaml_path=metrics_path)
+            ilogger.info(f"Aggregate metrics saved to {metrics_path}")
+            visuals.plot_agg_metrics(agg_metrics, save_prefix=f'{save_prefix}_agg_metrics_dim{i}', display=False)
+
+    return agg_metrics, sam_metrics
 
 
 def has_wandb_connectivity(host="api.wandb.ai", port=443, timeout=2.0):
@@ -666,7 +724,8 @@ class OmniRunModule(LightningModule):
 
         return trainer
 
-    def evaluate(self, datamodule, save_prefix=None, save_individual=False, accelerator="cuda", devices="auto", debug=False, **kwargs):
+    def evaluate(self, datamodule, save_prefix=None, save_level=2, split_dim=None,
+                 accelerator="cuda", devices="auto", debug=False, **kwargs):
         """ Test the model using PyTorch Lightning Trainer.
         Args:
             datamodule: LightningDataModule
@@ -689,46 +748,21 @@ class OmniRunModule(LightningModule):
             ckpt_path=self.cfg.get('resume_from_ckpt', None),
         )
 
-        if save_prefix and not self.is_child_process and self.predict_epoch_metrics:
+        if save_level >= 1 and save_prefix and not self.is_child_process and self.predict_epoch_metrics:
             metrics_path = f"{save_prefix}_batch_metrics.csv"
-            ilogger.info(f"Saving batch metrics to {metrics_path} ...")
             save_epoch_metrics(self.predict_epoch_metrics, metrics_path)
             ilogger.info(f"Batch metrics saved to {metrics_path}")
 
         # concat all batches to two dicts of tensors (feats, preds)
         eval_feats, eval_preds = utils.concat_dicts_outputs(eval_outputs)
         del eval_outputs
-        
-        if save_prefix and not self.is_child_process:
-            save_path = f"{save_prefix}_eval_outputs.pt"
-            save_model_outputs(eval_feats, eval_preds, save_path, pruning=True)
 
-        ilogger.info("Calculating summary metrics ...")
-        sum_metrics = loss_metrics.calc_benchmark(eval_preds, eval_feats, keep_batchdim=False)
+        agg_metrics, sam_metrics = save_eval_results(eval_feats, eval_preds, save_prefix=save_prefix,
+            save_level=save_level, split_dim=split_dim, pruning=True)
 
-        if save_prefix and not self.is_child_process:
-            metrics_path = f"{save_prefix}_sum_metrics.yaml"
-            ilogger.info(f"Saving test summary metrics to {metrics_path} ...")
-            utils.to_yaml(sum_metrics, yaml_path=metrics_path)
-            ilogger.info(f"Test summary metrics saved to {metrics_path}")
-        else:
-            print("Summary Metrics:")
-            print(sum_metrics)
+        return {'feats': eval_feats, 'preds': eval_preds, 'agg_metrics': agg_metrics, 'sam_metrics': sam_metrics}
 
-        if save_individual and save_prefix and not self.is_child_process:
-            ilogger.info("Calculating individual metrics ...")
-            ind_metrics = loss_metrics.calc_benchmark(eval_preds, eval_feats, keep_batchdim=True)
-
-            metrics_path = f"{save_prefix}_ind_metrics.csv"
-            ilogger.info(f"Saving test individual metrics to {metrics_path} ...")
-            loss_metrics.save_individual_metrics(ind_metrics, metrics_path)
-            ilogger.info(f"Test individual metrics saved to {metrics_path}")
-        else:
-            ind_metrics = None
-
-        return {'feats': eval_feats, 'preds': eval_preds, 'sum_metrics': sum_metrics, 'ind_metrics': ind_metrics}
-
-    def predict(self, datamodule, save_prefix=None, accelerator="cuda", devices="auto", debug=False, **kwargs):
+    def predict(self, datamodule, save_prefix=None, save_level=2, accelerator="cuda", devices="auto", debug=False, **kwargs):
         """ Inference using PyTorch Lightning Trainer.
         Args:
             datamodule: LightningDataModule
@@ -754,13 +788,13 @@ class OmniRunModule(LightningModule):
         input_feats, pred_targets = utils.concat_dicts_outputs(pred_outputs)
 
         if save_prefix is not None and not self.is_child_process:
-            save_path = f"{save_prefix}_pred_outputs.pt"
-            save_model_outputs(input_feats, pred_targets, save_path, pruning=True)
-            
-            if self.predict_epoch_metrics and len(self.predict_epoch_metrics) > 0:
+            if save_level >= 1 and self.predict_epoch_metrics and len(self.predict_epoch_metrics) > 0:
                 metrics_path = f"{save_prefix}_batch_metrics.csv"
-                ilogger.info(f"Saving batch metrics to {metrics_path} ...")
                 save_epoch_metrics(self.predict_epoch_metrics, metrics_path)
                 ilogger.info(f"Batch metrics saved to {metrics_path}")            
 
-        return pred_outputs
+            if save_level >= 2:
+                save_path = f"{save_prefix}_pred_outputs.pt"
+                save_model_outputs(input_feats, pred_targets, save_path, pruning=True)
+
+        return {'feats': input_feats, 'preds': pred_targets}

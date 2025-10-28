@@ -1,5 +1,4 @@
 import os
-import tables
 import datetime
 import numpy as np
 import pandas as pd
@@ -12,10 +11,8 @@ import torch.nn as nn
 
 from AmbiSplice import utils
 from AmbiSplice import models
-from AmbiSplice import visuals
 from AmbiSplice import datasets
 from AmbiSplice import litmodule
-from AmbiSplice import loss_metrics
 
 ilogger = utils.get_pylogger(__name__)
 
@@ -38,7 +35,7 @@ def get_accelerator_devices(gpus=[0], matmul_precision='medium', deterministic=F
 
     torch.set_float32_matmul_precision(matmul_precision)
     torch.use_deterministic_algorithms(deterministic)
-    print(f"Available accelerator: {accelerator}; devices: {devices}")
+    print(f"Allocated accelerator: {accelerator}; devices: {devices}")
 
     return accelerator, devices
 
@@ -299,68 +296,52 @@ def main(main_cfg: omegaconf.DictConfig):
     elif main_cfg.stage in ('test', 'testing', 'eval', 'evaluate'):
 
         if not main_cfg.ensemble.enable:
-            eval_outputs = litrun.evaluate(datamodule=litdata,
-                                           save_prefix=main_cfg.save_prefix, save_individual=main_cfg.save_individual,
-                                           accelerator=accelerator, devices=devices, debug=main_cfg.debug)
-            if main_cfg.save_prefix and 'sum_metrics' in eval_outputs:
-                visuals.plot_sum_metrics(eval_outputs['sum_metrics'], save_prefix=main_cfg.save_prefix+'_sum_metrics', display=False)
+            eval_outputs = litrun.evaluate(datamodule=litdata, accelerator=accelerator, devices=devices, debug=main_cfg.debug,
+                                           save_prefix=main_cfg.infer.save_prefix, save_level=main_cfg.infer.save_level,
+                                           split_dim=main_cfg.infer.split_dim,
+                                           )
         else:
             litruns = get_ensemble_litruns(main_cfg, model=torch_model)
             epoch_feats = None
-            ensemble_cls = []
-            ensemble_psi = []
+            ensemble_cls_logits, ensemble_cls = [], []
+            ensemble_psi_logits, ensemble_psi = [], []
             for i, litrun in enumerate(litruns):
                 ilogger.info(f"Evaluating ensemble model {i+1}/{len(litruns)}")
-                eval_outputs = litrun.evaluate(datamodule=litdata, 
-                                               save_prefix=f"{main_cfg.save_prefix}_ens{i+1}", save_individual=False, 
-                                               accelerator=accelerator, devices=devices, debug=main_cfg.debug)
+                eval_outputs = litrun.evaluate(datamodule=litdata, accelerator=accelerator, devices=devices, debug=main_cfg.debug,
+                                               save_prefix=f"{main_cfg.infer.save_prefix}_ens{i+1}", save_level=main_cfg.infer.save_level,
+                                               split_dim=main_cfg.infer.split_dim,
+                                               )
 
                 if epoch_feats is None:
                     epoch_feats = eval_outputs['feats']  # same for all ensemble members
-                ensemble_cls.append(eval_outputs['preds']['cls'])  # list of tensors
-                ensemble_psi.append(eval_outputs['preds']['psi'])  # list of tensors
+                ensemble_cls_logits.append(eval_outputs['preds']['cls_logits'])
+                ensemble_psi_logits.append(eval_outputs['preds']['psi_logits'])
+                ensemble_cls.append(eval_outputs['preds']['cls'])
+                ensemble_psi.append(eval_outputs['preds']['psi'])
 
-                if main_cfg.save_prefix and 'sum_metrics' in eval_outputs:
-                    visuals.plot_sum_metrics(eval_outputs['sum_metrics'], save_prefix=main_cfg.save_prefix+f'_ens{i+1}_sum_metrics', display=False)
-
-                # delete litrun to save memory
-                del litrun
-                del eval_outputs
+                del litrun, eval_outputs
                 torch.cuda.empty_cache()
 
-            # average the ensemble outputs
-            avg_cls = torch.mean(torch.stack(ensemble_cls, dim=0), dim=0)
-            avg_psi = torch.mean(torch.stack(ensemble_psi, dim=0), dim=0)
-            eval_outputs = (epoch_feats, {'cls': avg_cls, 'psi': avg_psi})
+            # not really a good idea to average the logits, but let's do it for now
+            avg_cls_logits = torch.mean(torch.stack(ensemble_cls_logits, dim=0), dim=0); del ensemble_cls_logits
+            avg_psi_logits = torch.mean(torch.stack(ensemble_psi_logits, dim=0), dim=0); del ensemble_psi_logits
+            avg_cls = torch.mean(torch.stack(ensemble_cls, dim=0), dim=0); del ensemble_cls
+            avg_psi = torch.mean(torch.stack(ensemble_psi, dim=0), dim=0); del ensemble_psi
 
-            save_path = f"{main_cfg.save_prefix}_ens_outputs.pt"
-            ilogger.info(f"Saving ensemble outputs to {save_path} ...")
-            torch.save(eval_outputs, save_path)
-            ilogger.info(f"Ensemble outputs saved to {save_path}")
-            
-            ensemble_metrics = loss_metrics.calc_benchmark(eval_outputs[1], eval_outputs[0], keep_batchdim=False)
-            if main_cfg.save_prefix is not None:
-                metrics_path = f"{main_cfg.save_prefix}_ens_sum_metrics.yaml"
-                utils.to_yaml(ensemble_metrics, metrics_path)
-                ilogger.info(f"Ensemble summary metrics saved to {metrics_path}")
+            ensemble_preds = {'cls_logits': avg_cls_logits, 'psi_logits': avg_psi_logits, 'cls': avg_cls, 'psi': avg_psi}
 
-                visuals.plot_sum_metrics(ensemble_metrics, save_prefix=main_cfg.save_prefix+'_ens_sum_metrics', display=False)
-
-                if main_cfg.save_individual:
-                    ind_metrics = loss_metrics.calc_benchmark(eval_outputs[1], eval_outputs[0], keep_batchdim=True)
-                    metrics_path = f"{main_cfg.save_prefix}_ens_ind_metrics.csv"
-                    ilogger.info(f"Saving ensemble individual metrics to {metrics_path} ...")
-                    loss_metrics.save_individual_metrics(ind_metrics, metrics_path)
-                    ilogger.info(f"Ensemble individual metrics saved to {metrics_path}")
-            else:
-                ilogger.info(f"Ensemble summary metrics:\n{omegaconf.OmegaConf.to_yaml(ensemble_metrics)}")
+            if main_cfg.infer.save_prefix is not None:
+                litmodule.save_eval_results(epoch_feats, ensemble_preds, save_prefix=f'{main_cfg.infer.save_prefix}_ens',
+                                           save_level=main_cfg.infer.save_level, split_dim=main_cfg.infer.split_dim,
+                                           )
+            eval_outputs = {'feats': epoch_feats, 'preds': ensemble_preds}
 
         ilogger.info("Testing completed.")
 
         return eval_outputs
     elif main_cfg.stage in ('predict', 'inference', 'pred'):
         pred_outputs = litrun.predict(datamodule=litdata,
-                                      save_prefix=main_cfg.save_prefix, save_individual=main_cfg.save_individual, 
+                                      save_prefix=main_cfg.infer.save_prefix, save_level=main_cfg.infer.save_level, 
                                       accelerator=accelerator, devices=devices, debug=main_cfg.debug)
         ilogger.info("Prediction completed.")
 
