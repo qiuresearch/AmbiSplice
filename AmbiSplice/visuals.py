@@ -24,26 +24,38 @@ def plot_agg_metrics(agg_metrics, save_prefix=None, display=True):
     plt.title('Top-K Metrics')
     metrics_to_plot = ['topk_accuracy', 'topk_precision', 'topk_recall', 'topk_f1']
     width = 1.0 / len(metrics_to_plot) * 0.8  # the width of the bars
-    x_pos = np.arange(len(agg_metrics['topk_threshold'])) - (width * (len(metrics_to_plot) - 1) / 2)
+    x_pos = np.arange(len(agg_metrics['topk_accuracy'])) - (width * (len(metrics_to_plot) - 1) / 2)
 
     for i, metric in enumerate(metrics_to_plot):
         plt.bar(x_pos + i * width, agg_metrics[metric], width=width, label=metric.split('_')[-1])
-    plt.xticks(np.arange(len(agg_metrics['topk_threshold'])),
+    plt.xticks(np.arange(len(agg_metrics['topk_accuracy'])),
             [f"K={int(k) if k >= 1 else k}\n({agg_metrics['k'][i]})" for i, k in enumerate(agg_metrics['k0'])])
     plt.grid()
     plt.legend()
 
     plt.subplot(2, 2, 3)
     plt.title('Precision-Recall Curve')
-    plt.plot(agg_metrics['recall'], agg_metrics['precision'], marker='o', label='PRC curve')
-    plt.xlabel('Recall')    
+    plt.plot(agg_metrics['recall'], agg_metrics['precision'], linestyle='-', marker=None, label='PRC curve')
+    # mark top-k points
+    markers = ['o', 's', '^', 'D', 'v', '*', 'P', 'X', 'h', '+', 'x']
+    for i, (k0, precision, recall) in enumerate(zip(agg_metrics['k0'], agg_metrics['topk_precision'], agg_metrics['topk_recall'])):
+        marker = markers[i % len(markers)]
+        plt.scatter(recall, precision, marker=marker, s=100, edgecolors='k',
+            label=f"Top K={int(k0) if k0 >= 1 else k0}")
+    
+    plt.xlabel('Recall')
     plt.ylabel('Precision')
     plt.grid()
     plt.legend()
 
     plt.subplot(2, 2, 4)
     plt.title('Receiver Operating Characteristic Curve')
-    plt.plot(agg_metrics['fpr'], agg_metrics['tpr'], marker='o', label='ROC curve')
+    plt.plot(agg_metrics['fpr'], agg_metrics['tpr'], linestyle='-', marker=None, label='ROC curve')
+    # try to calculate fpr at top-k points from k0 (the ratio between predicted positives and total positives), precision, and recall
+    # for i, (k0, precision, recall) in enumerate(zip(agg_metrics['k0'], agg_metrics['topk_precision'], agg_metrics['topk_recall'])):
+    #     fpr = (recall - precision * recall) / (precision + 1e-8)
+    #     plt.scatter(fpr, precision, marker=markers[i % len(markers)], s=100, edgecolors='k',
+    #                 label=f"Top K={int(k0) if k0 >= 1 else k0}")
     plt.xlabel('False Positive Rate')
     plt.ylabel('True Positive Rate')
     plt.grid()

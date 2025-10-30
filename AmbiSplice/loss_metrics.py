@@ -8,7 +8,7 @@ from AmbiSplice import utils
 ilogger = utils.get_pylogger(os.path.basename(__name__))
 
 
-def calc_topk_roc_prc_curves(y_pred, y_true, ks=(0.5, 1, 2, 4), multiples_of_true=False):
+def calc_topk_roc_prc_curves(y_pred, y_true, ks=(0.5, 1, 2, 4), multiples_of_true=False, eps=1e-8):
     """ Compute top-k accuracy, precision, recall, f1, auroc, auprc
         y_pred: 1D or 2D numpy array of predicted scores (probabilities)
         y_true: 1D or 2D numpy array of ground truth binary labels (0 or 1)
@@ -21,7 +21,6 @@ def calc_topk_roc_prc_curves(y_pred, y_true, ks=(0.5, 1, 2, 4), multiples_of_tru
     idx_true = torch.where(y_true > 0)[0]
     if idx_true.size == 0:
         ilogger.warning("No positive samples in y_true.")
-        return None
 
     if y_pred.ndim > 1:
         y_pred = y_pred.flatten()
@@ -38,6 +37,7 @@ def calc_topk_roc_prc_curves(y_pred, y_true, ks=(0.5, 1, 2, 4), multiples_of_tru
     for k in ks:
         metric = {}
         if k < 1 or k > len(y_true):
+            ilogger.warning(f"Invalid k={k} for y_true of length {len(y_true)}.")
             continue
 
         if k * len(idx_true) < len(y_true): # small k 
@@ -85,26 +85,22 @@ def calc_topk_roc_prc_curves(y_pred, y_true, ks=(0.5, 1, 2, 4), multiples_of_tru
     fprs = np.zeros_like(thresholds)
     precisions = np.zeros_like(thresholds)
     recalls = np.zeros_like(thresholds)
+    tps = np.zeros_like(thresholds)
+    fps = np.zeros_like(thresholds)
+    fns = np.zeros_like(thresholds)
 
     for i, idx in enumerate(idx_thresholds):
-        tp = y_true[argsorted_y_pred[idx:]].sum()
-        fp = len(y_true) - idx - tp
-        fn = len(idx_true) - tp
+        tps[i] = y_true[argsorted_y_pred[idx:]].sum()
+        fps[i] = len(y_true) - idx - tps[i]
+        fns[i] = len(idx_true) - tps[i]
 
-        tprs[i] = tp / len(idx_true)
-        fprs[i] = fp / (len(y_true) - len(idx_true))
+    tprs = (tps + eps) / (len(idx_true) + eps)
+    fprs = (fps + eps) / (len(y_true) - len(idx_true) + eps)
 
-        if tp + fp > 0:
-            precisions[i] = tp / (tp + fp)
-        else:
-            precisions[i] = 1.0
+    precisions = (tps + eps) / (tps + fps + eps)
+    recalls = (tps + eps) / (tps + fns + eps)
 
-        if tp + fn > 0:
-            recalls[i] = tp / (tp + fn)
-        else:
-            recalls[i] = 0.0
-
-    f1s = 2 * precisions * recalls / (precisions + recalls + 1e-8)
+    f1s = (2 * precisions * recalls + eps) / (precisions + recalls + eps)
 
     sorted_indices = np.arange(len(recalls)) # [np.argsort(recalls)]
     # compute AUC using the trapezoidal rule with numpy
@@ -115,8 +111,12 @@ def calc_topk_roc_prc_curves(y_pred, y_true, ks=(0.5, 1, 2, 4), multiples_of_tru
     # prc_auc = integrate.trapz(precisions[sorted_indices], recalls[sorted_indices])
 
     all_metrics.update({
+        'N': len(y_true),
         'idx_threshold': idx_thresholds,
         'threshold': thresholds[sorted_indices],
+        'tp': tps,
+        'fp': fps,
+        'fn': fns,
         'tpr': tprs[sorted_indices],
         'fpr': fprs[sorted_indices],
         'recall': recalls[sorted_indices],

@@ -137,10 +137,11 @@ eval_pangolinsolo_pangolinsolo1: ## Evaluate PangolinSolo model trained on Pango
 	ckpt_dir=checkpoints/pangolinsolo.pangolinsolo1_2025-10-25_11-46-07_cqw6jfnv
 	tissues=(liver)
 	tissues=(heart liver brain testis)
+	tissues+=("heart,liver,brain,testis")
 	for ((i=0; i<$${#tissues[@]}; i++)) ; do
 		conda run --no-capture-output --name $(CONDA_ENV_NAME) \
 		python -u run_ambisplice.py stage=eval \
-			infer.save_prefix=$${ckpt_dir}/pangolin_test_$${tissues[i]} \
+			infer.save_prefix=$${ckpt_dir}/pangolin_test_$${tissues[i]//,/-} \
 			infer.save_level=2 infer.eval_dim=null \
 			model.type=pangolinsolo \
 			model.state_dict_path=null \
@@ -176,7 +177,7 @@ eval_pangolinorig_ensemble_pangolin: ## Evaluate Pangolin original ensemble aver
 eval_pangolinorig_pangolin: ## Evaluate Pangolin original model
 	# Run Pangolin model (final.modelnum.tissue.epoch) on Pangolin dataset
 	#	dataset.predict_path=data/pangolin/dataset_train_all.h5 \
-	models=(final.1.0.3 final.2.0.3 final.3.0.3 final.4.0.3 final.5.0.3)
+	models=(final.1.0.3 final.2.0.3 final.3.0.3 final.4.0.3 final.5.0.3 final.1.0.3.v2 final.2.0.3.v2 final.3.0.3.v2)
 	for model in $${models[@]} ; do
 		conda run --no-capture-output --name $(CONDA_ENV_NAME) \
 		python -u run_ambisplice.py stage=eval \

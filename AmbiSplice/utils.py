@@ -5,6 +5,7 @@ Some code adapted from
 https://github.com/microsoft/protein-frame-flow/blob/main/experiments/utils.py
 """
 
+import numbers
 import os
 import yaml
 import logging
@@ -48,6 +49,14 @@ def get_pylogger(name=__name__) -> logging.Logger:
 def is_scalar(v):
     # if v is None or v is False:
         # return False
+    if isinstance(v, numbers.Number):
+        return True
+    if isinstance(v, bool):
+        return False
+    if isinstance(v, str):
+        return False
+    if isinstance(v, (list, tuple, dict, set)):
+        return False
     if np.isscalar(v):
         return True
     if isinstance(v, np.ndarray) and v.ndim == 0:
