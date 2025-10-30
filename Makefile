@@ -193,6 +193,34 @@ eval_pangolinorig_pangolin: ## Evaluate Pangolin original model
 			debug=$(debug)
 	done
 
+train_pangolinsolo_pangolinsolo123: ## Train PangolinSolo model on PangolinSolo dataset
+	conda run --no-capture-output --name $(CONDA_ENV_NAME) \
+	python -u run_ambisplice.py stage=train gpus=[$(gpus)] \
+		run_name=pangolinsolo.pangolinsolo123 \
+		model.type=pangolinsolo \
+		model.state_dict_path=null \
+		dataset.type=pangolinsolo \
+		+dataset.tissue_types=[heart,liver,brain] \
+		dataset.train_path=data/pangolin/dataset_train_all.h5 \
+		dataloader.train_batch_size=96 \
+		dataloader.val_batch_size=128 \
+		litrun.resume_from_ckpt=null \
+		debug=$(debug)
+
+train_pangolinsolo_pangolinsolo124: ## Train PangolinSolo model on PangolinSolo dataset
+	conda run --no-capture-output --name $(CONDA_ENV_NAME) \
+	python -u run_ambisplice.py stage=train gpus=[$(gpus)] \
+		run_name=pangolinsolo.pangolinsolo124 \
+		model.type=pangolinsolo \
+		model.state_dict_path=null \
+		dataset.type=pangolinsolo \
+		+dataset.tissue_types=[heart,liver,testis] \
+		dataset.train_path=data/pangolin/dataset_train_all.h5 \
+		dataloader.train_batch_size=96 \
+		dataloader.val_batch_size=128 \
+		litrun.resume_from_ckpt=null \
+		debug=$(debug)
+
 train_pangolinsolo_pangolinsolo1: ## Train PangolinSolo model on PangolinSolo dataset
 	conda run --no-capture-output --name $(CONDA_ENV_NAME) \
 	python -u run_ambisplice.py stage=train gpus=[$(gpus)] \
