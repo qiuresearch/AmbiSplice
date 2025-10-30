@@ -99,7 +99,7 @@ def save_model_outputs(feats, preds, save_path, pruning=True):
     ilogger.info(f"Model outputs saved to {save_path}")
 
 
-def save_eval_results(feats, preds, save_prefix=None, save_level=2, split_dim=None, pruning=True):
+def save_eval_results(feats, preds, save_prefix=None, save_level=2, eval_dim=None, pruning=True):
     """ Save evaluation outputs and metrics.
     Args:
         feats: dict of tensors, ground truth features/labels
@@ -134,16 +134,16 @@ def save_eval_results(feats, preds, save_prefix=None, save_level=2, split_dim=No
     else:
         sam_metrics = None
 
-    if save_prefix and split_dim is not None:
-        dim_size = preds['cls_logits'].shape[split_dim]
-        for i in tqdm(range(dim_size), total=dim_size, desc=f"Saving eval outputs for dim {split_dim} ..."):
-            dim_preds = {'cls_logits': preds['cls_logits'].select(split_dim, i),
-                        'psi_logits': preds['psi_logits'].select(split_dim, i),
-                        'cls': preds['cls'].select(split_dim, i),
-                        'psi': preds['psi'].select(split_dim, i),
+    if save_prefix and eval_dim is not None:
+        dim_size = preds['cls_logits'].shape[eval_dim]
+        for i in tqdm(range(dim_size), total=dim_size, desc=f"Saving eval outputs for dim {eval_dim} ..."):
+            dim_preds = {'cls_logits': preds['cls_logits'].select(eval_dim, i),
+                        'psi_logits': preds['psi_logits'].select(eval_dim, i),
+                        'cls': preds['cls'].select(eval_dim, i),
+                        'psi': preds['psi'].select(eval_dim, i),
                         }
-            dim_labels = {'cls': feats['cls'].select(split_dim, i),
-                        'psi': feats['psi'].select(split_dim, i),
+            dim_labels = {'cls': feats['cls'].select(eval_dim, i),
+                        'psi': feats['psi'].select(eval_dim, i),
                         }
             agg_metrics = loss_metrics.calc_benchmark(dim_preds, dim_labels, exclude_dim=None)
             metrics_path = f"{save_prefix}_agg_metrics_dim{i}.yaml"
@@ -724,7 +724,7 @@ class OmniRunModule(LightningModule):
 
         return trainer
 
-    def evaluate(self, datamodule, save_prefix=None, save_level=2, split_dim=None,
+    def evaluate(self, datamodule, save_prefix=None, save_level=2, eval_dim=None,
                  accelerator="cuda", devices="auto", debug=False, **kwargs):
         """ Test the model using PyTorch Lightning Trainer.
         Args:
@@ -758,7 +758,7 @@ class OmniRunModule(LightningModule):
         del eval_outputs
 
         agg_metrics, sam_metrics = save_eval_results(eval_feats, eval_preds, save_prefix=save_prefix,
-            save_level=save_level, split_dim=split_dim, pruning=True)
+            save_level=save_level, eval_dim=eval_dim, pruning=True)
 
         return {'feats': eval_feats, 'preds': eval_preds, 'agg_metrics': agg_metrics, 'sam_metrics': sam_metrics}
 

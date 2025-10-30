@@ -298,7 +298,7 @@ def main(main_cfg: omegaconf.DictConfig):
         if not main_cfg.ensemble.enable:
             eval_outputs = litrun.evaluate(datamodule=litdata, accelerator=accelerator, devices=devices, debug=main_cfg.debug,
                                            save_prefix=main_cfg.infer.save_prefix, save_level=main_cfg.infer.save_level,
-                                           split_dim=main_cfg.infer.split_dim,
+                                           eval_dim=main_cfg.infer.eval_dim,
                                            )
         else:
             litruns = get_ensemble_litruns(main_cfg, model=torch_model)
@@ -309,7 +309,7 @@ def main(main_cfg: omegaconf.DictConfig):
                 ilogger.info(f"Evaluating ensemble model {i+1}/{len(litruns)}")
                 eval_outputs = litrun.evaluate(datamodule=litdata, accelerator=accelerator, devices=devices, debug=main_cfg.debug,
                                                save_prefix=f"{main_cfg.infer.save_prefix}_ens{i+1}", save_level=main_cfg.infer.save_level,
-                                               split_dim=main_cfg.infer.split_dim,
+                                               eval_dim=main_cfg.infer.eval_dim,
                                                )
 
                 if epoch_feats is None:
@@ -332,7 +332,7 @@ def main(main_cfg: omegaconf.DictConfig):
 
             if main_cfg.infer.save_prefix is not None:
                 litmodule.save_eval_results(epoch_feats, ensemble_preds, save_prefix=f'{main_cfg.infer.save_prefix}_ens',
-                                           save_level=main_cfg.infer.save_level, split_dim=main_cfg.infer.split_dim,
+                                           save_level=main_cfg.infer.save_level, eval_dim=main_cfg.infer.eval_dim,
                                            )
             eval_outputs = {'feats': epoch_feats, 'preds': ensemble_preds}
 
