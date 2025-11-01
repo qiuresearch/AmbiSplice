@@ -1,10 +1,60 @@
 import os
+import yaml
 import datetime
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 
 from . import utils
+
+
+def load_model_dataset_metrics(model_dataset_paths):
+    model_dataset_metrics = {}
+    for model, dataset_paths in model_dataset_paths.items():
+        dataset_metrics = {}
+        for dataset, yaml_path in dataset_paths.items():
+            with open(yaml_path, 'r') as f:
+                dataset_metrics[dataset] = yaml.safe_load(f)
+        model_dataset_metrics[model] = dataset_metrics
+    return model_dataset_metrics
+
+
+def plot_model_dataset_metrics(model_dataset_metrics, ys=['cls_loss', 'psi_loss', 'cls_f1', 'psi_mse', 'auprc', 'auroc'], save_prefix=None, display=True):
+    import matplotlib.pyplot as plt
+    
+    fig = plt.figure(figsize=(12, 8))
+
+    model_names = list(model_dataset_metrics.keys())
+    dataset_names = list(model_dataset_metrics[model_names[0]].keys())
+    n_models = len(model_dataset_metrics)
+    n_datasets = len(model_dataset_metrics[model_names[0]])
+
+    for i, y in enumerate(ys):
+        plt.subplot((len(ys) + 1) // 2, 2, i + 1)
+        plt.title(f'{y}')
+        xpos = np.arange(n_datasets)
+        for j, model in enumerate(model_names):
+            dataset_metrics = model_dataset_metrics[model]
+
+            yval = [dataset_metrics[dataset][y] for dataset in dataset_names]
+            plt.bar(xpos + ((j+0.5) / n_models - 0.5)*0.85, yval, width=1/(n_models + 1)*0.9, align='center', alpha=0.7, label=model)
+        plt.xticks(xpos, dataset_names)
+        plt.ylabel(y)
+        if y.endswith('loss'):
+            plt.yscale('log')
+        plt.grid()
+        plt.tight_layout()
+
+    # add model_names as legends at the top of the entire figure
+    fig.legend(model_names, loc='upper center', bbox_to_anchor=(0.5, 0.01), ncol=5)
+    fig.tight_layout()
+    if save_prefix:
+        out_png = f'{save_prefix}_model_dataset_metrics.png'
+        plt.savefig(out_png)
+        print(f'Saved figure to {out_png}')
+    if display:
+        plt.show()
+
 
 def plot_agg_metrics(agg_metrics, save_prefix=None, display=True):
     plt.figure(figsize=(13, 10))

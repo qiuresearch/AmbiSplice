@@ -55,10 +55,11 @@ eval_pangolinomni2_pangolinsolo123: ## Evaluate PangolinOmni2 model trained on P
 	ckpt_dir=checkpoints/pangolinomni2.pangolinsolo123_2025-10-27_07-27-47_933otwx4
 	tissues=(liver)
 	tissues=(heart liver brain testis)
+	tissues=(heart liver brain testis "heart,liver,brain,testis")	
 	for ((i=0; i<$${#tissues[@]}; i++)) ; do
 		conda run --no-capture-output --name $(CONDA_ENV_NAME) \
 		python -u run_ambisplice.py stage=eval \
-			infer.save_prefix=$${ckpt_dir}/pangolin_test_$${tissues[i]} \
+			infer.save_prefix=$${ckpt_dir}/pangolin_test_$${tissues[i]//,/-} \
 			infer.save_level=2 infer.eval_dim=null \
 			model.type=pangolinomni2 \
 			model.state_dict_path=null \
@@ -75,12 +76,13 @@ eval_pangolinomni2_pangolinsolo123: ## Evaluate PangolinOmni2 model trained on P
 
 eval_pangolinomni_pangolinsolo123: ## Evaluate PangolinOmni model trained on PangolinSolo123 dataset
 	ckpt_dir=checkpoints/pangolinomni.pangolinsolo123_2025-10-21_23-25-37_bsi1y0zt
-	tissues=(heart liver brain testis)
 	tissues=(liver)
+	tissues=(heart liver brain testis "heart,liver,brain,testis")
+	tissues=("heart,liver,brain,testis")	
 	for ((i=0; i<$${#tissues[@]}; i++)) ; do
 		conda run --no-capture-output --name $(CONDA_ENV_NAME) \
 		python -u run_ambisplice.py stage=eval \
-			infer.save_prefix=$${ckpt_dir}/pangolin_test_$${tissues[i]} \
+			infer.save_prefix=$${ckpt_dir}/pangolin_test_$${tissues[i]//,/-} \
 			infer.save_level=2 infer.eval_dim=null \
 			model.type=pangolinomni \
 			model.state_dict_path=null \
@@ -95,30 +97,56 @@ eval_pangolinomni_pangolinsolo123: ## Evaluate PangolinOmni model trained on Pan
 		wait
 	done
 
-eval_pangolin_pangolin: ## Evaluate Pangolin model trained on Pangolin dataset (quad inputs and outputs)
-	ckpt_dir="checkpoints/pangolin.pangolin_2025-10-21_22-16-17_mnsgbck4"
-	conda run --no-capture-output --name $(CONDA_ENV_NAME) \
-	python -u run_ambisplice.py stage=eval \
-		infer.save_prefix=$${ckpt_dir}/pangolin_test \
-		infer.save_level=2 infer.eval_dim=-2 \
-		model.type=pangolin \
-		model.state_dict_path=null \
-		litrun.resume_from_ckpt=$${ckpt_dir}/last.ckpt \
-		dataset.type=pangolin \
-		dataset.train_path=null \
-		dataset.predict_size=$(predict_size) \
-		dataset.predict_path=data/pangolin/dataset_test_1.h5 \
-		+dataset.tissue_types=[heart,liver,brain,testis] \
-		debug=$(debug)
-
 eval_pangolinsolo_pangolinsolo4: ## Evaluate PangolinSolo model trained on PangolinSolo testis dataset (single tissue input and output)
 	ckpt_dir=checkpoints/pangolinsolo.pangolinsolo4_2025-10-27_16-15-32_8l8omvzn
 	tissues=(liver)
-	tissues=(heart liver brain testis)
+	tissues=(heart liver brain testis "heart,liver,brain,testis")
 	for ((i=0; i<$${#tissues[@]}; i++)) ; do
 		conda run --no-capture-output --name $(CONDA_ENV_NAME) \
 		python -u run_ambisplice.py stage=eval \
-			infer.save_prefix=$${ckpt_dir}/pangolin_test_$${tissues[i]} \
+			infer.save_prefix=$${ckpt_dir}/pangolin_test_$${tissues[i]//,/-} \
+			infer.save_level=2 infer.eval_dim=null \
+			model.type=pangolinsolo \
+			model.state_dict_path=null \
+			litrun.resume_from_ckpt=$${ckpt_dir}/last.ckpt \
+			dataset.type=pangolinsolo \
+			dataset.train_path=null \
+			dataset.predict_size=$(predict_size) \
+			dataset.predict_path=data/pangolin/dataset_test_1.h5 \
+			+dataset.tissue_types=[$${tissues[i]}] \
+			debug=$(debug)
+		wait
+	done
+
+eval_pangolinsolo_pangolinsolo3: ## Evaluate PangolinSolo model trained on PangolinSolo testis dataset (single tissue input and output)
+	ckpt_dir=checkpoints/pangolinsolo.pangolinsolo3_2025-10-29_03-43-28_l9t6a1nc
+	tissues=(liver)
+	tissues=(heart liver brain testis "heart,liver,brain,testis")
+	for ((i=0; i<$${#tissues[@]}; i++)) ; do
+		conda run --no-capture-output --name $(CONDA_ENV_NAME) \
+		python -u run_ambisplice.py stage=eval \
+			infer.save_prefix=$${ckpt_dir}/pangolin_test_$${tissues[i]//,/-} \
+			infer.save_level=2 infer.eval_dim=null \
+			model.type=pangolinsolo \
+			model.state_dict_path=null \
+			litrun.resume_from_ckpt=$${ckpt_dir}/last.ckpt \
+			dataset.type=pangolinsolo \
+			dataset.train_path=null \
+			dataset.predict_size=$(predict_size) \
+			dataset.predict_path=data/pangolin/dataset_test_1.h5 \
+			+dataset.tissue_types=[$${tissues[i]}] \
+			debug=$(debug)
+		wait
+	done
+
+eval_pangolinsolo_pangolinsolo2: ## Evaluate PangolinSolo model trained on PangolinSolo liver dataset (single tissue input and output)
+	ckpt_dir=checkpoints/pangolinsolo.pangolinsolo2_2025-10-29_05-02-24_4wltwlym
+	tissues=(liver)
+	tissues=(heart liver brain testis "heart,liver,brain,testis")
+	for ((i=0; i<$${#tissues[@]}; i++)) ; do
+		conda run --no-capture-output --name $(CONDA_ENV_NAME) \
+		python -u run_ambisplice.py stage=eval \
+			infer.save_prefix=$${ckpt_dir}/pangolin_test_$${tissues[i]//,/-} \
 			infer.save_level=2 infer.eval_dim=null \
 			model.type=pangolinsolo \
 			model.state_dict_path=null \
@@ -174,10 +202,30 @@ eval_pangolinorig_ensemble_pangolin: ## Evaluate Pangolin original ensemble aver
 		+dataset.tissue_types=[heart,liver,brain,testis] \
 		debug=$(debug)
 
+eval_pangolin_pangolin: ## Evaluate Pangolin model trained on Pangolin dataset (quad inputs and outputs)
+	ckpt_dir="checkpoints/pangolin.pangolin_2025-10-21_22-16-17_mnsgbck4"
+	conda run --no-capture-output --name $(CONDA_ENV_NAME) \
+	python -u run_ambisplice.py stage=eval \
+		infer.save_prefix=$${ckpt_dir}/pangolin_test \
+		infer.save_level=2 infer.eval_dim=-2 \
+		model.type=pangolin \
+		model.state_dict_path=null \
+		litrun.resume_from_ckpt=$${ckpt_dir}/last.ckpt \
+		dataset.type=pangolin \
+		dataset.train_path=null \
+		dataset.predict_size=$(predict_size) \
+		dataset.predict_path=data/pangolin/dataset_test_1.h5 \
+		+dataset.tissue_types=[heart,liver,brain,testis] \
+		debug=$(debug)
+
 eval_pangolinorig_pangolin: ## Evaluate Pangolin original model
 	# Run Pangolin model (final.modelnum.tissue.epoch) on Pangolin dataset
 	#	dataset.predict_path=data/pangolin/dataset_train_all.h5 \
 	models=(final.1.0.3 final.2.0.3 final.3.0.3 final.4.0.3 final.5.0.3 final.1.0.3.v2 final.2.0.3.v2 final.3.0.3.v2)
+	models=(final.1.1.3 final.2.1.3 final.3.1.3 final.4.1.3 final.5.1.3 final.1.1.3.v2 final.2.1.3.v2 final.3.1.3.v2)
+	models+=(final.1.2.3 final.2.2.3 final.3.2.3 final.4.2.3 final.5.2.3 final.1.2.3.v2 final.2.2.3.v2 final.3.2.3.v2)	
+	models=(final.1.3.3 final.2.3.3 final.3.3.3 final.4.3.3 final.5.3.3 final.1.3.3.v2 final.2.3.3.v2 final.3.3.3.v2)
+	models+=(final.1.4.3 final.2.4.3 final.3.4.3 final.4.4.3 final.5.4.3 final.1.4.3.v2 final.2.4.3.v2 final.3.4.3.v2)
 	for model in $${models[@]} ; do
 		conda run --no-capture-output --name $(CONDA_ENV_NAME) \
 		python -u run_ambisplice.py stage=eval \
