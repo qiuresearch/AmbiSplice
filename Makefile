@@ -356,6 +356,21 @@ train_pangolinomni2_pangolinsolo123: ## Train PangolinOmni2 model on PangolinSol
 		litrun.resume_from_ckpt=null \
 		debug=$(debug)
 
+train_pangolinomni3_pangolinsolo123: ## Train PangolinOmni3 model on PangolinSolo dataset
+	conda run --no-capture-output --name $(CONDA_ENV_NAME) \
+	python -u run_ambisplice.py stage=train gpus=[$(gpus)] \
+		run_name=pangolinomni3.pangolinsolo123 \
+		model.type=pangolinomni3 \
+		model.state_dict_path=null \
+		dataset.type=pangolinsolo \
+		dataset.train_path=data/pangolin/dataset_train_all.h5 \
+		+dataset.tissue_types=[heart,liver,brain] \
+		+dataset.tissue_embedding_path="data/tissue_avg_pca_embeddings.csv" \
+		dataloader.train_batch_size=96 \
+		dataloader.val_batch_size=128 \
+		litrun.resume_from_ckpt=null \
+		debug=$(debug)		
+
 train_pangolin_pangolin: ## Train Pangolin model on Pangolin dataset (all four tissues)
 	conda run --no-capture-output --name $(CONDA_ENV_NAME) \
 	python -u run_ambisplice.py stage=train gpus=[$(gpus)] \

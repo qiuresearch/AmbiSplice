@@ -239,7 +239,7 @@ class PangolinOmni3(SpliceBaseModule):
         self.conv2 = nn.Conv1d(32, L, 1)
 
         self.bn1 = nn.BatchNorm1d(L)
-        self.bn2 = nn.BatchNorm1d(L)
+        # self.bn2 = nn.BatchNorm1d(L)
 
         self.skip = nn.Conv1d(L, L, 1)
         self.resblocks, self.convs = nn.ModuleList(), nn.ModuleList()
@@ -258,8 +258,8 @@ class PangolinOmni3(SpliceBaseModule):
     def forward(self, batch_feats):
         x = batch_feats['seq_onehot']
             
-        conv = 0.8 * self.bn1(self.conv1(x[:, :4, :]))
-        conv += 0.2 * self.bn2(self.conv2(x[:, 4:, :]))
+        conv = 0.5 * self.bn1(self.conv1(x[:, :4, :]))
+        conv += 0.5 * F.normalize(self.conv2(x[:, 4:, :]), p=2, dim=1)
 
         skip = self.skip(conv)
         j = 0

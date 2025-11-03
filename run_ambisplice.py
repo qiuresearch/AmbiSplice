@@ -60,6 +60,8 @@ def get_torch_model(model_cfg: omegaconf.DictConfig):
         torch_model = models.PangolinOmni(L=L, W=W, AR=AR, **model_cfg)
     elif model_cfg.type.upper() == 'PangolinOmni2'.upper():
         torch_model = models.PangolinOmni2(L=L, W=W, AR=AR, **model_cfg)
+    elif model_cfg.type.upper() == 'PangolinOmni3'.upper():
+        torch_model = models.PangolinOmni3(L=L, W=W, AR=AR, **model_cfg)
     else:
         if hasattr(models, model_cfg.type):
             model_class = getattr(models, model_cfg.type)
