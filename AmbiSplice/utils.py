@@ -8,6 +8,7 @@ https://github.com/microsoft/protein-frame-flow/blob/main/experiments/utils.py
 import numbers
 import os
 import yaml
+import socket
 import logging
 import numpy as np
 
@@ -30,6 +31,15 @@ def get_rank():
             return int(rank)
     # None to differentiate whether an environment variable was set at all
     return None
+
+
+def has_wandb_connectivity(host="api.wandb.ai", port=443, timeout=2.0):
+    try:
+        s = socket.create_connection((host, port), timeout)
+        s.close()
+        return True
+    except OSError:
+        return False
 
 
 def get_pylogger(name=__name__) -> logging.Logger:
@@ -137,14 +147,14 @@ def flatten_dict(raw_dict):
     return flattened
 
 
-def peekaboo_tensors(vars_dict, prefix=''):
+def peekaboo_tensors(vars_dict, prefix='', recursive=False):
     """ Display variables (a dict of tensors) in a formatted table. """
     if prefix:
         print(f"\n{prefix} Variables:")
     else:
         print("\nVariables:")
 
-    print(f"{'Key':<20} {'Type':<20} {'Shape':<25} {'Dtype':<15} {'Device':<15} {'Requires Grad':<15}")
+    print(f"{'Key':<23} {'Type':<20} {'Shape':<25} {'Dtype':<15} {'Device':<15} {'Requires Grad':<15}")
     print("-" * 110)
     for k, v in vars_dict.items():
         if isinstance(v, torch.Tensor):
@@ -159,5 +169,10 @@ def peekaboo_tensors(vars_dict, prefix=''):
             dtype = str(v.dtype) if hasattr(v, 'dtype') else "-"
             device = "-"
             requires_grad = "-"
-        print(f"{k:<20} {vtype:<20} {shape:<25} {dtype:<15} {device:<15} {requires_grad:<15}")
+        print(f"{k:<23} {vtype:<20} {shape:<25} {dtype:<15} {device:<15} {requires_grad:<15}")
     print("-" * 110)
+
+    if recursive:
+        for k, v in vars_dict.items():
+            if isinstance(v, dict):
+                peekaboo_tensors(v, prefix=f"{prefix}['{k}']", recursive=True)

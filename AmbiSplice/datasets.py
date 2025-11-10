@@ -248,7 +248,7 @@ class GeneSitesDataset(Dataset):
                  data_dir='./', enable_cache=False, cache_dir='/tmp',
                  weighted_sampling=False, dynamic_weights=True, min_quality=None,
                  stratified_sampling=None, sampling_method=None, 
-                 random_seed=42, stage=False, samples_per_seq=1,
+                 random_seed=42, training=True,
                  **kwargs):
         """
         PyTorch Dataset for RNA splice sites at the gene level.
@@ -294,7 +294,7 @@ class GeneSitesDataset(Dataset):
             self.cache_dir = cache_dir
             if not os.path.exists(cache_dir): os.makedirs(cache_dir)
        
-        self.stage = stage
+        self.training = training
         self.min_quality = min_quality
 
         # Set up customized sampling options
@@ -340,9 +340,8 @@ class GeneSitesDataset(Dataset):
             self.epoch_size = len(meta_df)
 
         if summarize and not self.is_child_process:
-            # display the state of the dataset in a nice format
             print(f"SpliceDataset summary:")
-            print(f"               training: {self.stage}")
+            print(f"               training: {self.training}")
             print(f"           len(meta_df): {len(self.meta_df)}")
             print(f"             epoch_size: {self.epoch_size}")
             print(f"               data_dir: {self.data_dir}")
@@ -354,8 +353,6 @@ class GeneSitesDataset(Dataset):
             print(f"      weighted_sampling: {self.weighted_sampling}")
             print(f"        dynamic_weights: {self.dynamic_weights}")
             # print(f"    sampling_method: {self.sampling_method if self.sampling_method else 'None'}")
-            # print(f"    seed_start: {seed_start}")
-            # print(f"  samples_per_seq: {samples_per_seq}")
 
     def __len__(self):
         return self.epoch_size
@@ -372,7 +369,13 @@ class GeneSitesDataset(Dataset):
         return sample_feat
 
     def get_normalized_sampling_weights(self):
-        """ Get normalized sampling weights for stratified or all indices """
+        """ Get normalized sampling weights for stratified or all indices 
+        
+        Yields:
+            self.stratified_sampling_weights: list of np.arrays for each stratified group
+            self.sampling_weights: np.array for all indices         
+        """
+
         if self.stratified_sampling:
             self.stratified_sampling_weights = []
             for i, ilocs in enumerate(self.stratified_ilocs):
@@ -396,8 +399,8 @@ class GeneSitesDataset(Dataset):
         """ Customized sampling logic based on the configuration """
         self.iterations += 1
 
-        if idx >= len(self.meta_df):
-            idx = idx % len(self.meta_df)
+        # if idx >= len(self.meta_df):
+        #     idx = idx % len(self.meta_df)
 
         if self.customized_sampling:
             if self.stratified_sampling: # randomly sample from stratified groups
@@ -444,17 +447,11 @@ class GeneSitesDataset(Dataset):
             ilogger.warning(f"Warning: Sample features for index {idx} are None, skipping.")
             return None
 
-        if self.dynamic_weights:
-            # self.meta_df.iloc[idx, self.iweight] = sample_feats['target_feats']['quality'].item()
-            if self.weighted_sampling and self.iterations % self.epoch_size == 0:
-                self.get_normalized_sampling_weights()
-
-        if self.stage:
-            pass
-            # if sample_feats['target_feats']['quality'] < min_quality:
-            #     return None
-            # if sample_feats['input_feats']['ss'].sum() < 7:
-            #     return None
+        if self.training:
+            if self.dynamic_weights:
+                # Todo: update sampling weights based on sample quality
+                if self.weighted_sampling and self.iterations % self.epoch_size == 0:
+                    self.get_normalized_sampling_weights()
                 
         return sample_feat
     

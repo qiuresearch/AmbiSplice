@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import hydra
 import GPUtil
-import omegaconf
+from omegaconf import DictConfig, OmegaConf, ListConfig
 
 import torch
 import torch.nn as nn
@@ -12,13 +12,14 @@ import torch.nn as nn
 from AmbiSplice import utils
 from AmbiSplice import models
 from AmbiSplice import datasets
-from AmbiSplice import litmodule
+from AmbiSplice import litrun_module
+from AmbiSplice import litdata_module
 
 ilogger = utils.get_pylogger(__name__)
 
 def get_accelerator_devices(gpus=[0], matmul_precision='medium', deterministic=False):
     """ Get accelerator and devices for PyTorch Lightning Trainer."""
-    if not isinstance(gpus, (list, tuple, omegaconf.listconfig.ListConfig)):
+    if not isinstance(gpus, (list, tuple, ListConfig)):
         gpus = [] if gpus is None else [gpus]
 
     if gpus and torch.cuda.is_available():
@@ -40,7 +41,7 @@ def get_accelerator_devices(gpus=[0], matmul_precision='medium', deterministic=F
     return accelerator, devices
 
 
-def get_torch_model(model_cfg: omegaconf.DictConfig):
+def get_torch_model(model_cfg: DictConfig):
     """ Initialize model from config."""
     L = 32
     W = np.asarray([11, 11, 11, 11, 11, 11, 11, 11,
@@ -69,7 +70,7 @@ def get_torch_model(model_cfg: omegaconf.DictConfig):
         else:
             raise ValueError(f"Unknown model type: {model_cfg.type}")
 
-    ilogger.info(f"Initialized model {model_cfg.type} with config:\n{omegaconf.OmegaConf.to_yaml(model_cfg)}")
+    ilogger.info(f"Initialized model {model_cfg.type} with config:\n{OmegaConf.to_yaml(model_cfg)}")
 
     if model_cfg.state_dict_path is not None:
         state_dict_path = os.path.abspath(os.path.expanduser(model_cfg.state_dict_path))
@@ -81,7 +82,7 @@ def get_torch_model(model_cfg: omegaconf.DictConfig):
     return torch_model
 
 
-def get_datasets(dataset_cfg: omegaconf.DictConfig):
+def get_torch_datasets(dataset_cfg: DictConfig):
     """ Prepare training, validation, and prediction datasets."""
 
     train_set, val_set, test_set, predict_set = None, None, None, None
@@ -189,23 +190,23 @@ def get_datasets(dataset_cfg: omegaconf.DictConfig):
     else:
         raise ValueError(f"Unknown dataset type: {dataset_cfg.type}")
 
-    ilogger.info(f'Initialized datasets with config:\n{omegaconf.OmegaConf.to_yaml(dataset_cfg)}')
+    ilogger.info(f'Initialized datasets with config:\n{OmegaConf.to_yaml(dataset_cfg)}')
     return {'train': train_set, 'val': val_set, 'test': test_set, 'predict': predict_set}
 
 
-def get_litdata(datasets, dataloader_cfg: omegaconf.DictConfig):
-    litdata = litmodule.OmniDataModule(train_dataset=datasets['train'],
-                                       val_dataset=datasets['val'],
-                                       test_dataset=datasets['test'],
-                                       predict_dataset=datasets['predict'],
+def get_litdata(torch_datasets, dataloader_cfg: DictConfig):
+    litdata = litdata_module.OmniDataModule(train_dataset=torch_datasets['train'],
+                                       val_dataset=torch_datasets['val'],
+                                       test_dataset=torch_datasets['test'],
+                                       predict_dataset=torch_datasets['predict'],
                                        **dataloader_cfg)
-    ilogger.info(f"Initialized litdata with config:\n{omegaconf.OmegaConf.to_yaml(dataloader_cfg)}")
+    ilogger.info(f"Initialized litdata with config:\n{OmegaConf.to_yaml(dataloader_cfg)}")
     return litdata
 
 
-def get_litrun(cfg: omegaconf.DictConfig, model: nn.Module):
-    litrun = litmodule.OmniRunModule(model=model, cfg=cfg)
-    ilogger.info(f"Initialized litrun with config:\n{omegaconf.OmegaConf.to_yaml(cfg)}")
+def get_litrun(litrun_cfg: DictConfig, model: nn.Module):
+    litrun = litrun_module.OmniRunModule(model=model, cfg=litrun_cfg)
+    ilogger.info(f"Initialized litrun with config:\n{OmegaConf.to_yaml(litrun_cfg)}")
     return litrun
 
 
@@ -216,7 +217,7 @@ def get_ensemble_litruns(main_cfg, model=None):
 
     def get_ensemble_cfgs(ensemble_cfg):
         """ Convert ensemble_cfg.model to a list of model cfgs."""
-        ilogger.info(f"Ensemble config:\n{omegaconf.OmegaConf.to_yaml(ensemble_cfg)}")
+        ilogger.info(f"Ensemble config:\n{OmegaConf.to_yaml(ensemble_cfg)}")
         cfgs = []
         for key, val in ensemble_cfg.items():
             if val is None or val[0] is None:
@@ -239,13 +240,13 @@ def get_ensemble_litruns(main_cfg, model=None):
     # get the list of models (which may be the same model)
     if model_cfgs:
         assert len(model_cfgs) == ensemble_size, "Length of ensemble.model does not match ensemble size!"
-        models = [get_torch_model(omegaconf.OmegaConf.merge(main_cfg.model, omegaconf.OmegaConf.create(cfg))) for cfg in model_cfgs]
+        models = [get_torch_model(OmegaConf.merge(main_cfg.model, OmegaConf.create(cfg))) for cfg in model_cfgs]
     else:
         models = [model for _ in range(ensemble_size)]
     # get the list of litrun (which may be the same litrun)
     if litrun_cfgs:
         assert len(litrun_cfgs) == ensemble_size, "Length of ensemble.litrun does not match ensemble size!"
-        litruns = [get_litrun(omegaconf.OmegaConf.merge(main_cfg.litrun, omegaconf.OmegaConf.create(cfg)), model=models[i]) for i, cfg in enumerate(litrun_cfgs)]
+        litruns = [get_litrun(OmegaConf.merge(main_cfg.litrun, OmegaConf.create(cfg)), model=models[i]) for i, cfg in enumerate(litrun_cfgs)]
     else:
         litruns = [get_litrun(main_cfg.litrun, model=models[i]) for i in range(ensemble_size)]
         
@@ -253,7 +254,7 @@ def get_ensemble_litruns(main_cfg, model=None):
     
 
 @hydra.main(version_base=None, config_path="./configs", config_name="train.yaml")
-def main(main_cfg: omegaconf.DictConfig):
+def main(main_cfg: DictConfig):
     # From Pangolin: 
     # 1) no dropout!!!
     # 2) batch_size=12, 90/10 random split for train/val
@@ -280,14 +281,14 @@ def main(main_cfg: omegaconf.DictConfig):
     # cfg_path = os.path.join(os.getcwd(), 'configs', 'train.yaml')
     # main_cfg = omegaconf.OmegaConf.load(cfg_path)
 
-    omegaconf.OmegaConf.set_struct(main_cfg, False)  # allow new attribute assignment
+    OmegaConf.set_struct(main_cfg, False)  # allow new attribute assignment
     accelerator, devices = get_accelerator_devices(gpus=main_cfg.gpus)
 
     torch_model = get_torch_model(main_cfg.model)
     litrun = get_litrun(main_cfg.litrun, torch_model)
 
-    datasets = get_datasets(main_cfg.dataset)
-    litdata = get_litdata(datasets, main_cfg.dataloader)
+    torch_datasets = get_torch_datasets(main_cfg.dataset)
+    litdata = get_litdata(torch_datasets, main_cfg.dataloader)
 
     if main_cfg.stage in ('train', 'training', 'fit'):
         # ilogger.info(f"Training model with config:\n{omegaconf.OmegaConf.to_yaml(main_cfg)}")
@@ -333,7 +334,7 @@ def main(main_cfg: omegaconf.DictConfig):
             ensemble_preds = {'cls_logits': avg_cls_logits, 'psi_logits': avg_psi_logits, 'cls': avg_cls, 'psi': avg_psi}
 
             if main_cfg.infer.save_prefix is not None:
-                litmodule.save_eval_results(epoch_feats, ensemble_preds, save_prefix=f'{main_cfg.infer.save_prefix}_ens',
+                litrun_module.save_eval_results(epoch_feats, ensemble_preds, save_prefix=f'{main_cfg.infer.save_prefix}_ens',
                                            save_level=main_cfg.infer.save_level, eval_dim=main_cfg.infer.eval_dim,
                                            )
             eval_outputs = {'feats': epoch_feats, 'preds': ensemble_preds}
