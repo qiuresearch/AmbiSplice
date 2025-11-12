@@ -58,7 +58,7 @@ eval_pangolinomni2_pangolinsolo123: ## Evaluate PangolinOmni2 model trained on P
 	tissues=(heart liver brain testis "heart,liver,brain,testis")	
 	for ((i=0; i<$${#tissues[@]}; i++)) ; do
 		conda run --no-capture-output --name $(CONDA_ENV_NAME) \
-		python -u run_ambisplice.py stage=eval \
+		python -u run.py stage=eval \
 			infer.save_prefix=$${ckpt_dir}/pangolin_test_$${tissues[i]//,/-} \
 			infer.save_level=2 infer.eval_dim=null \
 			model.type=pangolinomni2 \
@@ -81,7 +81,7 @@ eval_pangolinomni_pangolinsolo123: ## Evaluate PangolinOmni model trained on Pan
 	tissues=("heart,liver,brain,testis")	
 	for ((i=0; i<$${#tissues[@]}; i++)) ; do
 		conda run --no-capture-output --name $(CONDA_ENV_NAME) \
-		python -u run_ambisplice.py stage=eval \
+		python -u run.py stage=eval \
 			infer.save_prefix=$${ckpt_dir}/pangolin_test_$${tissues[i]//,/-} \
 			infer.save_level=2 infer.eval_dim=null \
 			model.type=pangolinomni \
@@ -103,7 +103,7 @@ eval_pangolinsolo_pangolinsolo4: ## Evaluate PangolinSolo model trained on Pango
 	tissues=(heart liver brain testis "heart,liver,brain,testis")
 	for ((i=0; i<$${#tissues[@]}; i++)) ; do
 		conda run --no-capture-output --name $(CONDA_ENV_NAME) \
-		python -u run_ambisplice.py stage=eval \
+		python -u run.py stage=eval \
 			infer.save_prefix=$${ckpt_dir}/pangolin_test_$${tissues[i]//,/-} \
 			infer.save_level=2 infer.eval_dim=null \
 			model.type=pangolinsolo \
@@ -124,7 +124,7 @@ eval_pangolinsolo_pangolinsolo3: ## Evaluate PangolinSolo model trained on Pango
 	tissues=(heart liver brain testis "heart,liver,brain,testis")
 	for ((i=0; i<$${#tissues[@]}; i++)) ; do
 		conda run --no-capture-output --name $(CONDA_ENV_NAME) \
-		python -u run_ambisplice.py stage=eval \
+		python -u run.py stage=eval \
 			infer.save_prefix=$${ckpt_dir}/pangolin_test_$${tissues[i]//,/-} \
 			infer.save_level=2 infer.eval_dim=null \
 			model.type=pangolinsolo \
@@ -145,7 +145,7 @@ eval_pangolinsolo_pangolinsolo2: ## Evaluate PangolinSolo model trained on Pango
 	tissues=(heart liver brain testis "heart,liver,brain,testis")
 	for ((i=0; i<$${#tissues[@]}; i++)) ; do
 		conda run --no-capture-output --name $(CONDA_ENV_NAME) \
-		python -u run_ambisplice.py stage=eval \
+		python -u run.py stage=eval \
 			infer.save_prefix=$${ckpt_dir}/pangolin_test_$${tissues[i]//,/-} \
 			infer.save_level=2 infer.eval_dim=null \
 			model.type=pangolinsolo \
@@ -168,7 +168,7 @@ eval_pangolinsolo_pangolinsolo1: ## Evaluate PangolinSolo model trained on Pango
 	tissues+=("heart,liver,brain,testis")
 	for ((i=0; i<$${#tissues[@]}; i++)) ; do
 		conda run --no-capture-output --name $(CONDA_ENV_NAME) \
-		python -u run_ambisplice.py stage=eval \
+		python -u run.py stage=eval \
 			infer.save_prefix=$${ckpt_dir}/pangolin_test_$${tissues[i]//,/-} \
 			infer.save_level=2 infer.eval_dim=null \
 			model.type=pangolinsolo \
@@ -187,7 +187,7 @@ eval_pangolinorig_ensemble_pangolin: ## Evaluate Pangolin original ensemble aver
 	# Run Pangolin model (final.modelnum.tissue.epoch) on Pangolin dataset
 	model_dir=benchmarks/pangolin_models
 	conda run --no-capture-output --name $(CONDA_ENV_NAME) \
-	python -u run_ambisplice.py stage=eval \
+	python -u run.py stage=eval \
 	    infer.save_prefix=benchmarks/pangolin_ensemble/pangolin_test \
 		infer.save_level=2 infer.eval_dim=-2 \
 		model.type=pangolin \
@@ -205,7 +205,7 @@ eval_pangolinorig_ensemble_pangolin: ## Evaluate Pangolin original ensemble aver
 eval_pangolin_pangolin: ## Evaluate Pangolin model trained on Pangolin dataset (quad inputs and outputs)
 	ckpt_dir="checkpoints/pangolin.pangolin_2025-10-21_22-16-17_mnsgbck4"
 	conda run --no-capture-output --name $(CONDA_ENV_NAME) \
-	python -u run_ambisplice.py stage=eval \
+	python -u run.py stage=eval \
 		infer.save_prefix=$${ckpt_dir}/pangolin_test \
 		infer.save_level=2 infer.eval_dim=-2 \
 		model.type=pangolin \
@@ -228,7 +228,7 @@ eval_pangolinorig_pangolin: ## Evaluate Pangolin original model
 	models+=(final.1.4.3 final.2.4.3 final.3.4.3 final.4.4.3 final.5.4.3 final.1.4.3.v2 final.2.4.3.v2 final.3.4.3.v2)
 	for model in $${models[@]} ; do
 		conda run --no-capture-output --name $(CONDA_ENV_NAME) \
-		python -u run_ambisplice.py stage=eval \
+		python -u run.py stage=eval \
 			infer.save_prefix=benchmarks/pangolin_$${model}/pangolin_test \
 			infer.save_level=2 infer.eval_dim=-2 \
 			model.type=pangolin \
@@ -244,7 +244,7 @@ eval_pangolinorig_pangolin: ## Evaluate Pangolin original model
 
 train_pangolinsolo_pangolinsolo123: ## Train PangolinSolo model on PangolinSolo dataset
 	conda run --no-capture-output --name $(CONDA_ENV_NAME) \
-	python -u run_ambisplice.py stage=train gpus=[$(gpus)] \
+	python -u run.py stage=train gpus=[$(gpus)] \
 		run_name=pangolinsolo.pangolinsolo123 \
 		model.type=pangolinsolo \
 		model.state_dict_path=null \
@@ -258,7 +258,7 @@ train_pangolinsolo_pangolinsolo123: ## Train PangolinSolo model on PangolinSolo 
 
 train_pangolinsolo_pangolinsolo124: ## Train PangolinSolo model on PangolinSolo dataset
 	conda run --no-capture-output --name $(CONDA_ENV_NAME) \
-	python -u run_ambisplice.py stage=train gpus=[$(gpus)] \
+	python -u run.py stage=train gpus=[$(gpus)] \
 		run_name=pangolinsolo.pangolinsolo124 \
 		model.type=pangolinsolo \
 		model.state_dict_path=null \
@@ -272,7 +272,7 @@ train_pangolinsolo_pangolinsolo124: ## Train PangolinSolo model on PangolinSolo 
 
 train_pangolinsolo_pangolinsolo1: ## Train PangolinSolo model on PangolinSolo dataset
 	conda run --no-capture-output --name $(CONDA_ENV_NAME) \
-	python -u run_ambisplice.py stage=train gpus=[$(gpus)] \
+	python -u run.py stage=train gpus=[$(gpus)] \
 		run_name=pangolinsolo.pangolinsolo1 \
 		model.type=pangolinsolo \
 		model.state_dict_path=null \
@@ -286,7 +286,7 @@ train_pangolinsolo_pangolinsolo1: ## Train PangolinSolo model on PangolinSolo da
 
 train_pangolinsolo_pangolinsolo2: ## Train PangolinSolo model on PangolinSolo 2 dataset
 	conda run --no-capture-output --name $(CONDA_ENV_NAME) \
-	python -u run_ambisplice.py stage=train gpus=[$(gpus)] \
+	python -u run.py stage=train gpus=[$(gpus)] \
 		run_name=pangolinsolo.pangolinsolo2 \
 		model.type=pangolinsolo \
 		model.state_dict_path=null \
@@ -300,7 +300,7 @@ train_pangolinsolo_pangolinsolo2: ## Train PangolinSolo model on PangolinSolo 2 
 
 train_pangolinsolo_pangolinsolo3: ## Train PangolinSolo model on PangolinSolo dataset
 	conda run --no-capture-output --name $(CONDA_ENV_NAME) \
-	python -u run_ambisplice.py stage=train gpus=[$(gpus)] \
+	python -u run.py stage=train gpus=[$(gpus)] \
 		run_name=pangolinsolo.pangolinsolo3 \
 		model.type=pangolinsolo \
 		model.state_dict_path=null \
@@ -314,7 +314,7 @@ train_pangolinsolo_pangolinsolo3: ## Train PangolinSolo model on PangolinSolo da
 
 train_pangolinsolo_pangolinsolo4: ## Train PangolinSolo model on PangolinSolo dataset
 	conda run --no-capture-output --name $(CONDA_ENV_NAME) \
-	python -u run_ambisplice.py stage=train gpus=[$(gpus)] \
+	python -u run.py stage=train gpus=[$(gpus)] \
 		run_name=pangolinsolo.pangolinsolo4 \
 		model.type=pangolinsolo \
 		model.state_dict_path=null \
@@ -328,7 +328,7 @@ train_pangolinsolo_pangolinsolo4: ## Train PangolinSolo model on PangolinSolo da
 		
 train_pangolinomni_pangolinsolo123: ## Train PangolinOmni model on PangolinSolo dataset
 	conda run --no-capture-output --name $(CONDA_ENV_NAME) \
-	python -u run_ambisplice.py stage=train gpus=[$(gpus)] \
+	python -u run.py stage=train gpus=[$(gpus)] \
 		run_name=pangolinomni.pangolinsolo123 \
 		model.type=pangolinomni \
 		model.state_dict_path=null \
@@ -343,7 +343,7 @@ train_pangolinomni_pangolinsolo123: ## Train PangolinOmni model on PangolinSolo 
 
 train_pangolinomni2_pangolinsolo123: ## Train PangolinOmni2 model on PangolinSolo dataset
 	conda run --no-capture-output --name $(CONDA_ENV_NAME) \
-	python -u run_ambisplice.py stage=train gpus=[$(gpus)] \
+	python -u run.py stage=train gpus=[$(gpus)] \
 		run_name=pangolinomni2.pangolinsolo123 \
 		model.type=pangolinomni2 \
 		model.state_dict_path=null \
@@ -358,7 +358,7 @@ train_pangolinomni2_pangolinsolo123: ## Train PangolinOmni2 model on PangolinSol
 
 train_pangolinomni3_pangolinsolo123: ## Train PangolinOmni3 model on PangolinSolo dataset
 	conda run --no-capture-output --name $(CONDA_ENV_NAME) \
-	python -u run_ambisplice.py stage=train gpus=[$(gpus)] \
+	python -u run.py stage=train gpus=[$(gpus)] \
 		run_name=pangolinomni3.pangolinsolo123 \
 		model.type=pangolinomni3 \
 		model.state_dict_path=null \
@@ -373,7 +373,7 @@ train_pangolinomni3_pangolinsolo123: ## Train PangolinOmni3 model on PangolinSol
 
 train_pangolin_pangolin: ## Train Pangolin model on Pangolin dataset (all four tissues)
 	conda run --no-capture-output --name $(CONDA_ENV_NAME) \
-	python -u run_ambisplice.py stage=train gpus=[$(gpus)] \
+	python -u run.py stage=train gpus=[$(gpus)] \
 		model.type=pangolin \
 		model.state_dict_path=null \
 		dataset.type=pangolin \
@@ -386,7 +386,7 @@ train_pangolin_pangolin: ## Train Pangolin model on Pangolin dataset (all four t
 
 train_splicesolo_genecrops: ## Train SpliceSolo on genecrops dataset
 	conda run --no-capture-output --name $(CONDA_ENV_NAME) \
-	python -u run_ambisplice.py stage=train gpus=[$(gpus)] \
+	python -u run.py stage=train gpus=[$(gpus)] \
 		model.type=SpliceSolo \
 		model.state_dict_path=null \
 		dataset.type=genecrops \
@@ -398,7 +398,7 @@ train_splicesolo_genecrops: ## Train SpliceSolo on genecrops dataset
 
 train_splicesolo_genesites: ## Train SpliceSolo on gene sites dataset
 	conda run --no-capture-output --name $(CONDA_ENV_NAME) \
-	python -u run_ambisplice.py stage=train gpus=[$(gpus)] \
+	python -u run.py stage=train gpus=[$(gpus)] \
 		model.type=splicesolo \
 		model.state_dict_path=null \
 		dataset.type=genesites \

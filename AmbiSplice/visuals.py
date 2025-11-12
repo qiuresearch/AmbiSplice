@@ -7,6 +7,61 @@ import matplotlib.colors as mcolors
 
 from . import utils
 
+def plot_train_feats(feats, tissue_idx=0, meta_dict={}):
+
+    fig, axes = plt.subplots(nrows=3, sharex=True, figsize=(16, 6))
+    for ax in axes:
+        ax.margins(y=0)
+    # panel 1: onehot encoding of sequence
+    seq_onehot = feats['seq_onehot'][:, 5000:10000]
+    seq_onehot = np.concatenate([seq_onehot, 1 - seq_onehot.sum(axis=0, keepdims=True)], axis=0)
+    axes[0].imshow(seq_onehot, aspect='auto', cmap='Greys', interpolation='nearest')
+    axes[0].set_title(f'Sequence and Splice Feats {meta_dict}')
+    axes[0].set_yticks([0, 1, 2, 3, 4])
+    axes[0].set_yticklabels(['A', 'C', 'G', 'T', 'N'])
+    axes[0].set_ylabel('One-hot Encoding')
+
+    # panel 2: cls
+    cls_label = feats['cls'][tissue_idx] if feats['cls'].ndim == 2 else feats['cls']
+    axlines = axes[1].plot(cls_label, label='true')
+
+    cls_max = max([1, cls_label.max()])
+
+    if len(feats['seq']) == 15000:
+        seq = feats['seq'][5000:10000]
+    elif len(feats['seq']) == 5000:
+        seq = feats['seq']
+    else:
+        raise ValueError(f'Unexpected seq length: {len(feats["seq"])}')
+
+    for p in np.where(cls_label > 0)[0]:
+        axes[1].text(p, cls_max * 1.05, seq[p], fontsize=12, color=axlines[0].get_color(), ha='center', va='center')
+
+    axes[1].set_ylim(0, cls_max * 1.15)
+    axes[1].set_ylabel('Splice Site\nClassification')
+
+    # panel 3: psi
+    psi_label = feats['psi'][tissue_idx] if feats['psi'].ndim == 2 else feats['psi']
+    axlines = axes[2].plot(psi_label, label='true')
+    axes[2].set_ylim(-2.8, 1.2)
+
+    psi_pos = np.where(psi_label > 0.05)[0]
+    for p in psi_pos:
+        axes[2].text(p, 1.05, seq[p], fontsize=12, color=axlines[0].get_color(), ha='center', va='center')
+
+    axes[2].set_ylim(0, 1.15)
+    
+    axes[2].set_xlabel('Sequence Position')
+    axes[2].set_ylabel('Psi Value\nRegression')
+
+    axes[0].grid(axis='x')
+    axes[1].grid(axis='x')
+    axes[2].grid(axis='x')
+
+    plt.tight_layout()
+    plt.subplots_adjust(hspace=0)
+    plt.show()
+
 
 def load_model_dataset_metrics(model_dataset_paths):
     model_dataset_metrics = {}

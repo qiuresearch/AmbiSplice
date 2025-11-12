@@ -149,6 +149,9 @@ def flatten_dict(raw_dict):
 
 def peekaboo_tensors(vars_dict, prefix='', recursive=False):
     """ Display variables (a dict of tensors) in a formatted table. """
+    if vars_dict is None or not hasattr(vars_dict, 'items'):
+        return
+    
     if prefix:
         print(f"\n{prefix} Variables:")
     else:
