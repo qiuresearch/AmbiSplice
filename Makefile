@@ -51,8 +51,51 @@ download_pangolin_genomes: ## Download Pangolin genomes
 	faidx Macaca_mulatta.Mmul_10.dna.toplevel.fa
 	faidx Rattus_norvegicus.Rnor_6.0.dna.toplevel.fa
 
+eval_pangolinomni3_pangolinsolo123: ## Evaluate PangolinOmni3 model trained on PangolinSolo123 dataset
+	ckpt_dir=checkpoints/pangolinomni3.pangolinsolo123_2025-11-11_00-04-02_97d417l3
+	tissues=(liver)
+	tissues=(heart liver brain testis)
+	tissues=(heart liver brain testis "heart,liver,brain,testis")	
+	tissues=()
+	for ((i=0; i<$${#tissues[@]}; i++)) ; do
+		conda run --no-capture-output --name $(CONDA_ENV_NAME) \
+		python -u run.py stage=eval \
+			infer.save_prefix=$${ckpt_dir}/pangolin_test_$${tissues[i]//,/-} \
+			infer.save_level=2 infer.eval_dim=null \
+			model.type=pangolinomni3 \
+			model.state_dict_path=null \
+			litrun.resume_from_ckpt=$${ckpt_dir}/last.ckpt \
+			dataset.type=pangolinsolo \
+			dataset.train_path=null \
+			dataset.predict_size=$(predict_size) \
+			dataset.predict_path=data/pangolin/dataset_test_1.h5 \
+			+dataset.tissue_types=[$${tissues[i]}] \
+			+dataset.tissue_embedding_path="data/tissue_avg_pca_embeddings.csv" \
+			debug=$(debug)
+		wait
+	done
+	tissues=(heart liver brain testis "heart,liver,brain,testis")	
+	for ((i=0; i<$${#tissues[@]}; i++)) ; do
+		conda run --no-capture-output --name $(CONDA_ENV_NAME) \
+		python -u run.py stage=eval \
+			infer.save_prefix=$${ckpt_dir}/pangolin_train_$${tissues[i]//,/-} \
+			infer.save_level=2 infer.eval_dim=null \
+			model.type=pangolinomni3 \
+			model.state_dict_path=null \
+			litrun.resume_from_ckpt=$${ckpt_dir}/last.ckpt \
+			dataset.type=pangolinsolo \
+			dataset.train_path=null \
+			dataset.predict_size=$(predict_size) \
+			dataset.predict_path=data/pangolin/dataset_train_all.h5 \
+			+dataset.tissue_types=[$${tissues[i]}] \
+			+dataset.tissue_embedding_path="data/tissue_avg_pca_embeddings.csv" \
+			debug=$(debug)
+		wait
+	done
+
 eval_pangolinomni2_pangolinsolo123: ## Evaluate PangolinOmni2 model trained on PangolinSolo123 dataset
 	ckpt_dir=checkpoints/pangolinomni2.pangolinsolo123_2025-10-27_07-27-47_933otwx4
+	ckpt_path="$${ckpt_dir}/best.ckpt"
 	tissues=(liver)
 	tissues=(heart liver brain testis)
 	tissues=(heart liver brain testis "heart,liver,brain,testis")	
@@ -63,7 +106,7 @@ eval_pangolinomni2_pangolinsolo123: ## Evaluate PangolinOmni2 model trained on P
 			infer.save_level=2 infer.eval_dim=null \
 			model.type=pangolinomni2 \
 			model.state_dict_path=null \
-			litrun.resume_from_ckpt=$${ckpt_dir}/last.ckpt \
+			litrun.resume_from_ckpt="$${ckpt_path}" \
 			dataset.type=pangolinsolo \
 			dataset.train_path=null \
 			dataset.predict_size=$(predict_size) \

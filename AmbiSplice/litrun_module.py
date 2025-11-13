@@ -378,7 +378,7 @@ class OmniRunModule(LightningModule):
         if self._train_steps == 0 and not self.is_child_process:
             utils.peekaboo_tensors(loss_items, prefix='Training Step Metrics')
         
-        self.log("train/loss", loss, prog_bar=True)
+        self.log("train_loss", loss, prog_bar=True)
         self.train_epoch_metrics.append(loss_items)
         self._train_steps += 1
 
@@ -425,7 +425,7 @@ class OmniRunModule(LightningModule):
         if self._validation_steps == 0 and not self.is_child_process:
             utils.peekaboo_tensors(loss_items, prefix='Validation Step Metrics')
 
-        self.log("val/loss", loss, prog_bar=True)
+        self.log("val_loss", loss, prog_bar=True)
         self.validation_epoch_metrics.append(loss_items)
         self._validation_steps += 1
         return loss

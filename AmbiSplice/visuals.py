@@ -33,9 +33,12 @@ def plot_train_feats(feats, tissue_idx=0, meta_dict={}):
         seq = feats['seq']
     else:
         raise ValueError(f'Unexpected seq length: {len(feats["seq"])}')
+    
+    if isinstance(seq, bytes):
+        seq = seq.decode('utf-8')
 
     for p in np.where(cls_label > 0)[0]:
-        axes[1].text(p, cls_max * 1.05, seq[p], fontsize=12, color=axlines[0].get_color(), ha='center', va='center')
+        axes[1].text(p, cls_max * 1.05, str(seq[p]), fontsize=12, color=axlines[0].get_color(), ha='center', va='center')
 
     axes[1].set_ylim(0, cls_max * 1.15)
     axes[1].set_ylabel('Splice Site\nClassification')
@@ -101,7 +104,7 @@ def plot_model_dataset_metrics(model_dataset_metrics, ys=['cls_loss', 'psi_loss'
         plt.tight_layout()
 
     # add model_names as legends at the top of the entire figure
-    fig.legend(model_names, loc='upper center', bbox_to_anchor=(0.5, 0.01), ncol=5)
+    fig.legend(model_names, loc='upper center', bbox_to_anchor=(0.5, 0.01), ncol=min([4, n_models]))
     fig.tight_layout()
     if save_prefix:
         out_png = f'{save_prefix}_model_dataset_metrics.png'
