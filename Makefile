@@ -414,8 +414,6 @@ train_pangolinomni3_pangolinsolo123: ## Train PangolinOmni3 model on PangolinSol
 		model.state_dict_path=null \
 		dataset.type=pangolinsolo \
 		dataset.train_path=data/pangolin/dataset_train_all.h5 \
-		dataset.train_size=1000 \
-		dataset.val_size=100 \
 		+dataset.tissue_types=[heart,liver,brain] \
 		+dataset.tissue_embedding_path="data/tissue_avg_pca_embeddings.csv" \
 		dataloader.train_batch_size=96 \
