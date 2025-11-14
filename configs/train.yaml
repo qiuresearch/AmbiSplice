@@ -56,7 +56,7 @@ dataloader:
   prefetch_factor: 7
 litrun:
   debug: ${debug}
-  seed: 123
+  seed: 1234
   resume_from_ckpt: null
   resume_model_weights_only: true
   optimizer:
@@ -70,10 +70,10 @@ litrun:
   trainer:
     min_epochs: 3
     max_epochs: 21
-    max_time: "5:20:13:14"  # D:HH:MM:SS
+    max_time: "7:00:00:00"  # D:HH:MM:SS
     strategy: auto
     precision: 32
-    overfit_batches: 0
+    overfit_batches: 0 # 0 means all batches used
     log_every_n_steps: 1
     deterministic: false
     check_val_every_n_epoch: 1
@@ -87,19 +87,20 @@ litrun:
   early_stopping:
     monitor: val_loss
     mode: min
-    patience: 3
+    patience: 11
     strict: true
     verbose: true
   lr_monitor:
     logging_interval: step
     log_momentum: false
   checkpoints:
-    dirpath: checkpoints/
-    filename: 'epoch{epoch:03d}_step{step:06d}_val_loss{val_loss:.4f}'
+    dirpath: checkpoints # wandb name will be appended automatically
+    filename: 'valoss-{val_loss:.4f}_epoch-{epoch:03d}_step-{step:06d}'
     auto_insert_metric_name: false
     save_weights_only: false
     save_last: true
-    save_top_k: 7
+    save_on_exception: false
+    save_top_k: -1 # 0: no model saved; -1: all models saved
     monitor: val_loss
     mode: min
     every_n_epochs: 1

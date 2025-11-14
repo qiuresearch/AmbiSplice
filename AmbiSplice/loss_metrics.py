@@ -306,12 +306,24 @@ def calc_benchmark(preds, labels, C_dim=1, exclude_dim=None, eps=1e-8):
         assert len(exclude_dim) == 1, "Only support excluding one dimension for individual metrics."
         dim_size = labels['cls'].shape[exclude_dim[0]]
 
+        E_dim = exclude_dim[0]
+        if E_dim < 0:
+            E_dim = labels['cls'].ndim + E_dim
+        if C_dim < 0:
+            C_dim = labels['cls'].ndim + C_dim
+        assert E_dim != C_dim, "Cannot exclude the class dimension."
+
+        if C_dim > E_dim:
+            C_dim -= 1  # after excluding E_dim, C_dim shifts left by 1
+
         _, all_metrics = calc_loss(preds, labels, exclude_dim=exclude_dim)
         all_metrics.update(calc_metric(preds, labels, exclude_dim=exclude_dim, to_numpy=True, eps=eps))
 
         for i in tqdm(range(dim_size), total=dim_size, desc="Calculating per-sample metrics"):
-            y_pred = (preds['cls'][i].argmax(dim=0).flatten() > 0.5).to(torch.float32)
-            y_true = (labels['cls'][i].flatten() > 0.5).to(torch.float32)
+
+            # y_pred = (preds['cls'][i].argmax(dim=0).flatten() > 0.5).to(torch.float32)
+            y_pred = preds['cls'].select(dim=E_dim, index=i).select(dim=C_dim, index=-1).flatten()
+            y_true = (labels['cls'].select(dim=E_dim, index=i).flatten() > 0.5).to(torch.float32)
             metric = calc_topk_roc_prc_curves(y_pred, y_true, ks=(0.5, 1, 2, 4), multiples_of_true=True)
             if metric is None:
                 continue
@@ -333,7 +345,8 @@ def calc_benchmark(preds, labels, C_dim=1, exclude_dim=None, eps=1e-8):
         all_metrics.update(calc_metric(preds, labels, exclude_dim=None, to_numpy=True, eps=eps))        
 
         ilogger.info("Calculating ROC and PRC metrics...")
-        y_pred = (preds['cls'].argmax(dim=C_dim).flatten() > 0.5).to(torch.float32)
+        # y_pred = (preds['cls'].argmax(dim=C_dim).flatten() > 0.5).to(torch.float32)
+        y_pred = preds['cls'].select(dim=C_dim, index=-1).flatten()
         y_true = (labels['cls'].flatten() > 0.5).to(torch.float32)
         all_metrics.update(calc_topk_roc_prc_curves(y_pred, y_true, ks=(0.5, 1, 2, 4), multiples_of_true=True))
         all_metrics['num_samples'] = labels['cls'].shape[0]

@@ -169,7 +169,7 @@ def plot_agg_metrics(agg_metrics, save_prefix=None, display=True):
     plt.grid()
     plt.legend()            
 
-    plt.figtext(0.5, 0.03, f"{save_prefix}.png\n{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", horizontalalignment='center', fontsize=9)
+    plt.figtext(0.5, 0.03, f"{save_prefix}.png\nCreation time: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", horizontalalignment='center', fontsize=9)
 
     if save_prefix:
         plt.savefig(f"{save_prefix}.png", dpi=300, bbox_inches='tight')

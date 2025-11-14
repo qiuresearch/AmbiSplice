@@ -206,17 +206,23 @@ eval_pangolinsolo_pangolinsolo2: ## Evaluate PangolinSolo model trained on Pango
 eval_pangolinsolo_pangolinsolo1: ## Evaluate PangolinSolo model trained on PangolinSolo heart dataset (single tissue input and output)
 # 	ckpt_dir=checkpoints/pangolinsolo_pangolin_2025-10-18_12-41-38_btn1jd24
 	ckpt_dir=checkpoints/pangolinsolo.pangolinsolo1_2025-10-25_11-46-07_cqw6jfnv
-	tissues=(liver)
-	tissues=(heart liver brain testis)
-	tissues+=("heart,liver,brain,testis")
+	ckpt_names=($$(ls $${ckpt_dir}/epoch*.ckpt))
+# 	echo "Available checkpoints:"
+# 	echo "$${ckpt_names[@]}"
+# 	tissues=(heart liver brain testis)
+# 	tissues+=("heart,liver,brain,testis")
+	tissues=(heart)
 	for ((i=0; i<$${#tissues[@]}; i++)) ; do
+		for ((j=0; j<$${#ckpt_names[@]}; j++)) ; do
+			epoch=$$(echo $${ckpt_names[j]} | rev | cut -d'-' -f3 | rev)
+			echo "Evaluating checkpoint: $${ckpt_names[j]} (epoch: $${epoch})"
 		conda run --no-capture-output --name $(CONDA_ENV_NAME) \
 		python -u run.py stage=eval \
-			infer.save_prefix=$${ckpt_dir}/pangolin_test_$${tissues[i]//,/-} \
+			infer.save_prefix=$${ckpt_dir}/pangolin_test_$${tissues[i]//,/-}_epoch-$${epoch} \
 			infer.save_level=2 infer.eval_dim=null \
 			model.type=pangolinsolo \
 			model.state_dict_path=null \
-			litrun.resume_from_ckpt=$${ckpt_dir}/last.ckpt \
+			litrun.resume_from_ckpt=$${ckpt_names[j]} \
 			dataset.type=pangolinsolo \
 			dataset.train_path=null \
 			dataset.predict_size=$(predict_size) \
@@ -224,6 +230,7 @@ eval_pangolinsolo_pangolinsolo1: ## Evaluate PangolinSolo model trained on Pango
 			+dataset.tissue_types=[$${tissues[i]}] \
 			debug=$(debug)
 		wait
+		done
 	done
 
 eval_pangolinorig_ensemble_pangolin: ## Evaluate Pangolin original ensemble average
@@ -407,6 +414,8 @@ train_pangolinomni3_pangolinsolo123: ## Train PangolinOmni3 model on PangolinSol
 		model.state_dict_path=null \
 		dataset.type=pangolinsolo \
 		dataset.train_path=data/pangolin/dataset_train_all.h5 \
+		dataset.train_size=1000 \
+		dataset.val_size=100 \
 		+dataset.tissue_types=[heart,liver,brain] \
 		+dataset.tissue_embedding_path="data/tissue_avg_pca_embeddings.csv" \
 		dataloader.train_batch_size=96 \
