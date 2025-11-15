@@ -53,10 +53,10 @@ download_pangolin_genomes: ## Download Pangolin genomes
 
 eval_pangolinomni3_pangolinsolo123: ## Evaluate PangolinOmni3 model trained on PangolinSolo123 dataset
 	ckpt_dir=checkpoints/pangolinomni3.pangolinsolo123_2025-11-11_00-04-02_97d417l3
+	ckpt_path="$${ckpt_dir}/best.ckpt"
 	tissues=(liver)
 	tissues=(heart liver brain testis)
 	tissues=(heart liver brain testis "heart,liver,brain,testis")	
-	tissues=()
 	for ((i=0; i<$${#tissues[@]}; i++)) ; do
 		conda run --no-capture-output --name $(CONDA_ENV_NAME) \
 		python -u run.py stage=eval \
@@ -64,29 +64,11 @@ eval_pangolinomni3_pangolinsolo123: ## Evaluate PangolinOmni3 model trained on P
 			infer.save_level=2 infer.eval_dim=null \
 			model.type=pangolinomni3 \
 			model.state_dict_path=null \
-			litrun.resume_from_ckpt=$${ckpt_dir}/last.ckpt \
+			litrun.resume_from_ckpt=$${ckpt_path} \
 			dataset.type=pangolinsolo \
 			dataset.train_path=null \
 			dataset.predict_size=$(predict_size) \
 			dataset.predict_path=data/pangolin/dataset_test_1.h5 \
-			+dataset.tissue_types=[$${tissues[i]}] \
-			+dataset.tissue_embedding_path="data/tissue_avg_pca_embeddings.csv" \
-			debug=$(debug)
-		wait
-	done
-	tissues=(heart liver brain testis "heart,liver,brain,testis")	
-	for ((i=0; i<$${#tissues[@]}; i++)) ; do
-		conda run --no-capture-output --name $(CONDA_ENV_NAME) \
-		python -u run.py stage=eval \
-			infer.save_prefix=$${ckpt_dir}/pangolin_train_$${tissues[i]//,/-} \
-			infer.save_level=2 infer.eval_dim=null \
-			model.type=pangolinomni3 \
-			model.state_dict_path=null \
-			litrun.resume_from_ckpt=$${ckpt_dir}/last.ckpt \
-			dataset.type=pangolinsolo \
-			dataset.train_path=null \
-			dataset.predict_size=$(predict_size) \
-			dataset.predict_path=data/pangolin/dataset_train_all.h5 \
 			+dataset.tissue_types=[$${tissues[i]}] \
 			+dataset.tissue_embedding_path="data/tissue_avg_pca_embeddings.csv" \
 			debug=$(debug)
@@ -120,8 +102,8 @@ eval_pangolinomni2_pangolinsolo123: ## Evaluate PangolinOmni2 model trained on P
 eval_pangolinomni_pangolinsolo123: ## Evaluate PangolinOmni model trained on PangolinSolo123 dataset
 	ckpt_dir=checkpoints/pangolinomni.pangolinsolo123_2025-10-21_23-25-37_bsi1y0zt
 	tissues=(liver)
-	tissues=(heart liver brain testis "heart,liver,brain,testis")
 	tissues=("heart,liver,brain,testis")	
+	tissues=(heart liver brain testis "heart,liver,brain,testis")
 	for ((i=0; i<$${#tissues[@]}; i++)) ; do
 		conda run --no-capture-output --name $(CONDA_ENV_NAME) \
 		python -u run.py stage=eval \
@@ -129,7 +111,7 @@ eval_pangolinomni_pangolinsolo123: ## Evaluate PangolinOmni model trained on Pan
 			infer.save_level=2 infer.eval_dim=null \
 			model.type=pangolinomni \
 			model.state_dict_path=null \
-			litrun.resume_from_ckpt=$${ckpt_dir}/last.ckpt \
+			litrun.resume_from_ckpt=$${ckpt_dir}/best.ckpt \
 			dataset.type=pangolinsolo \
 			dataset.train_path=null \
 			dataset.predict_size=$(predict_size) \
@@ -142,6 +124,7 @@ eval_pangolinomni_pangolinsolo123: ## Evaluate PangolinOmni model trained on Pan
 
 eval_pangolinsolo_pangolinsolo4: ## Evaluate PangolinSolo model trained on PangolinSolo testis dataset (single tissue input and output)
 	ckpt_dir=checkpoints/pangolinsolo.pangolinsolo4_2025-10-27_16-15-32_8l8omvzn
+	ckpt_path="$${ckpt_dir}/best.ckpt"
 	tissues=(liver)
 	tissues=(heart liver brain testis "heart,liver,brain,testis")
 	for ((i=0; i<$${#tissues[@]}; i++)) ; do
@@ -151,7 +134,7 @@ eval_pangolinsolo_pangolinsolo4: ## Evaluate PangolinSolo model trained on Pango
 			infer.save_level=2 infer.eval_dim=null \
 			model.type=pangolinsolo \
 			model.state_dict_path=null \
-			litrun.resume_from_ckpt=$${ckpt_dir}/last.ckpt \
+			litrun.resume_from_ckpt=$${ckpt_path} \
 			dataset.type=pangolinsolo \
 			dataset.train_path=null \
 			dataset.predict_size=$(predict_size) \
@@ -163,6 +146,7 @@ eval_pangolinsolo_pangolinsolo4: ## Evaluate PangolinSolo model trained on Pango
 
 eval_pangolinsolo_pangolinsolo3: ## Evaluate PangolinSolo model trained on PangolinSolo testis dataset (single tissue input and output)
 	ckpt_dir=checkpoints/pangolinsolo.pangolinsolo3_2025-10-29_03-43-28_l9t6a1nc
+	ckpt_path="$${ckpt_dir}/best.ckpt"
 	tissues=(liver)
 	tissues=(heart liver brain testis "heart,liver,brain,testis")
 	for ((i=0; i<$${#tissues[@]}; i++)) ; do
@@ -172,7 +156,7 @@ eval_pangolinsolo_pangolinsolo3: ## Evaluate PangolinSolo model trained on Pango
 			infer.save_level=2 infer.eval_dim=null \
 			model.type=pangolinsolo \
 			model.state_dict_path=null \
-			litrun.resume_from_ckpt=$${ckpt_dir}/last.ckpt \
+			litrun.resume_from_ckpt=$${ckpt_path} \
 			dataset.type=pangolinsolo \
 			dataset.train_path=null \
 			dataset.predict_size=$(predict_size) \
@@ -184,6 +168,7 @@ eval_pangolinsolo_pangolinsolo3: ## Evaluate PangolinSolo model trained on Pango
 
 eval_pangolinsolo_pangolinsolo2: ## Evaluate PangolinSolo model trained on PangolinSolo liver dataset (single tissue input and output)
 	ckpt_dir=checkpoints/pangolinsolo.pangolinsolo2_2025-10-29_05-02-24_4wltwlym
+	ckpt_path="$${ckpt_dir}/best.ckpt"
 	tissues=(liver)
 	tissues=(heart liver brain testis "heart,liver,brain,testis")
 	for ((i=0; i<$${#tissues[@]}; i++)) ; do
@@ -193,7 +178,7 @@ eval_pangolinsolo_pangolinsolo2: ## Evaluate PangolinSolo model trained on Pango
 			infer.save_level=2 infer.eval_dim=null \
 			model.type=pangolinsolo \
 			model.state_dict_path=null \
-			litrun.resume_from_ckpt=$${ckpt_dir}/last.ckpt \
+			litrun.resume_from_ckpt=$${ckpt_path} \
 			dataset.type=pangolinsolo \
 			dataset.train_path=null \
 			dataset.predict_size=$(predict_size) \
@@ -206,23 +191,17 @@ eval_pangolinsolo_pangolinsolo2: ## Evaluate PangolinSolo model trained on Pango
 eval_pangolinsolo_pangolinsolo1: ## Evaluate PangolinSolo model trained on PangolinSolo heart dataset (single tissue input and output)
 # 	ckpt_dir=checkpoints/pangolinsolo_pangolin_2025-10-18_12-41-38_btn1jd24
 	ckpt_dir=checkpoints/pangolinsolo.pangolinsolo1_2025-10-25_11-46-07_cqw6jfnv
-	ckpt_names=($$(ls $${ckpt_dir}/epoch*.ckpt))
-# 	echo "Available checkpoints:"
-# 	echo "$${ckpt_names[@]}"
-# 	tissues=(heart liver brain testis)
-# 	tissues+=("heart,liver,brain,testis")
-	tissues=(heart)
+	ckpt_path="$${ckpt_dir}/best.ckpt"
+	tissues=(liver)
+	tissues=(heart liver brain testis "heart,liver,brain,testis")
 	for ((i=0; i<$${#tissues[@]}; i++)) ; do
-		for ((j=0; j<$${#ckpt_names[@]}; j++)) ; do
-			epoch=$$(echo $${ckpt_names[j]} | rev | cut -d'-' -f3 | rev)
-			echo "Evaluating checkpoint: $${ckpt_names[j]} (epoch: $${epoch})"
 		conda run --no-capture-output --name $(CONDA_ENV_NAME) \
 		python -u run.py stage=eval \
-			infer.save_prefix=$${ckpt_dir}/pangolin_test_$${tissues[i]//,/-}_epoch-$${epoch} \
+			infer.save_prefix=$${ckpt_dir}/pangolin_test_$${tissues[i]//,/-} \
 			infer.save_level=2 infer.eval_dim=null \
 			model.type=pangolinsolo \
 			model.state_dict_path=null \
-			litrun.resume_from_ckpt=$${ckpt_names[j]} \
+			litrun.resume_from_ckpt=$${ckpt_path} \
 			dataset.type=pangolinsolo \
 			dataset.train_path=null \
 			dataset.predict_size=$(predict_size) \
@@ -230,8 +209,33 @@ eval_pangolinsolo_pangolinsolo1: ## Evaluate PangolinSolo model trained on Pango
 			+dataset.tissue_types=[$${tissues[i]}] \
 			debug=$(debug)
 		wait
-		done
-	done
+	done	
+# 	ckpt_names=($$(ls $${ckpt_dir}/epoch*.ckpt))
+# 	echo "Available checkpoints:"
+# 	echo "$${ckpt_names[@]}"
+# 	tissues=(heart liver brain testis)
+# 	tissues+=("heart,liver,brain,testis")
+# 	tissues=(heart)
+# 	for ((i=0; i<$${#tissues[@]}; i++)) ; do
+# 		for ((j=0; j<$${#ckpt_names[@]}; j++)) ; do
+# 			epoch=$$(echo $${ckpt_names[j]} | rev | cut -d'-' -f3 | rev)
+# 			echo "Evaluating checkpoint: $${ckpt_names[j]} (epoch: $${epoch})"
+# 		conda run --no-capture-output --name $(CONDA_ENV_NAME) \
+# 		python -u run.py stage=eval \
+# 			infer.save_prefix=$${ckpt_dir}/pangolin_test_$${tissues[i]//,/-}_epoch-$${epoch} \
+# 			infer.save_level=2 infer.eval_dim=null \
+# 			model.type=pangolinsolo \
+# 			model.state_dict_path=null \
+# 			litrun.resume_from_ckpt=$${ckpt_names[j]} \
+# 			dataset.type=pangolinsolo \
+# 			dataset.train_path=null \
+# 			dataset.predict_size=$(predict_size) \
+# 			dataset.predict_path=data/pangolin/dataset_test_1.h5 \
+# 			+dataset.tissue_types=[$${tissues[i]}] \
+# 			debug=$(debug)
+# 		wait
+# 		done
+# 	done
 
 eval_pangolinorig_ensemble_pangolin: ## Evaluate Pangolin original ensemble average
 	# Run Pangolin model (final.modelnum.tissue.epoch) on Pangolin dataset
@@ -260,7 +264,7 @@ eval_pangolin_pangolin: ## Evaluate Pangolin model trained on Pangolin dataset (
 		infer.save_level=2 infer.eval_dim=-2 \
 		model.type=pangolin \
 		model.state_dict_path=null \
-		litrun.resume_from_ckpt=$${ckpt_dir}/last.ckpt \
+		litrun.resume_from_ckpt=$${ckpt_dir}/best.ckpt \
 		dataset.type=pangolin \
 		dataset.train_path=null \
 		dataset.predict_size=$(predict_size) \
@@ -271,11 +275,11 @@ eval_pangolin_pangolin: ## Evaluate Pangolin model trained on Pangolin dataset (
 eval_pangolinorig_pangolin: ## Evaluate Pangolin original model
 	# Run Pangolin model (final.modelnum.tissue.epoch) on Pangolin dataset
 	#	dataset.predict_path=data/pangolin/dataset_train_all.h5 \
+	models=(final.1.3.3 final.2.3.3 final.3.3.3 final.4.3.3 final.5.3.3 final.1.3.3.v2 final.2.3.3.v2 final.3.3.3.v2)
+	models+=(final.1.4.3 final.2.4.3 final.3.4.3 final.4.4.3 final.5.4.3 final.1.4.3.v2 final.2.4.3.v2 final.3.4.3.v2)
 	models=(final.1.0.3 final.2.0.3 final.3.0.3 final.4.0.3 final.5.0.3 final.1.0.3.v2 final.2.0.3.v2 final.3.0.3.v2)
 	models=(final.1.1.3 final.2.1.3 final.3.1.3 final.4.1.3 final.5.1.3 final.1.1.3.v2 final.2.1.3.v2 final.3.1.3.v2)
 	models+=(final.1.2.3 final.2.2.3 final.3.2.3 final.4.2.3 final.5.2.3 final.1.2.3.v2 final.2.2.3.v2 final.3.2.3.v2)	
-	models=(final.1.3.3 final.2.3.3 final.3.3.3 final.4.3.3 final.5.3.3 final.1.3.3.v2 final.2.3.3.v2 final.3.3.3.v2)
-	models+=(final.1.4.3 final.2.4.3 final.3.4.3 final.4.4.3 final.5.4.3 final.1.4.3.v2 final.2.4.3.v2 final.3.4.3.v2)
 	for model in $${models[@]} ; do
 		conda run --no-capture-output --name $(CONDA_ENV_NAME) \
 		python -u run.py stage=eval \

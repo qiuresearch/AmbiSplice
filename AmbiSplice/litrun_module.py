@@ -185,14 +185,12 @@ class OmniRunModule(LightningModule):
         self.predict_epoch_metrics = []
         self.predict_epoch_samples = []
 
-        self._train_start_time = time.time()
-        self._epoch_start_time = time.time()        
-
         self._train_steps = 0
         self._validation_steps = 0
         self._test_steps = 0
         self._predict_steps = 0
 
+        self._epoch_start_time = time.time()        
         self.last_lr_step = -1 # not yet used
         self.save_hyperparameters(ignore=['model'])
 
@@ -458,16 +456,16 @@ class OmniRunModule(LightningModule):
         return super().on_validation_epoch_end()
 
     def test_step(self, batch_feats, batch_idx=None):
-        if self._test_steps == 0:
+        if self._test_steps == 0 and not self.is_child_process:
             utils.peekaboo_tensors(batch_feats, prefix='Test Step Input')
             
         preds = self.model(batch_feats)
-        if self._test_steps == 0:
+        if self._test_steps == 0 and not self.is_child_process:
             utils.peekaboo_tensors(preds, prefix='Test Step Output')
 
         loss, loss_items = self.model.calc_loss(preds, batch_feats)
         loss_items.update(self.model.calc_metric(preds, batch_feats))
-        if self._test_steps == 0:
+        if self._test_steps == 0 and not self.is_child_process:
             utils.peekaboo_tensors(loss_items, prefix='Test Loss Items')
 
         self.log("test/loss", loss, prog_bar=True)
@@ -478,6 +476,10 @@ class OmniRunModule(LightningModule):
         # Return is NOT collected by trainer.test()! So not useful at all!
         return (batch_feats, pred_labels)
 
+    def on_test_epoch_start(self):
+        self._epoch_start_time = time.time()
+        return super().on_test_epoch_start()
+    
     def on_test_epoch_end(self):
         epoch_time = (time.time() - self._epoch_start_time) / 60.0
         self.log(
@@ -489,7 +491,6 @@ class OmniRunModule(LightningModule):
             sync_dist=True,
             rank_zero_only=False,
         )
-        self._epoch_start_time = time.time()
 
         if len(self.test_epoch_metrics) > 0 and not self.is_child_process:
             peekaboo_epoch_metrics(
@@ -555,14 +556,13 @@ class OmniRunModule(LightningModule):
         elif cfg.get('resume_model_weights'):
             pass
 
-        torch_model = self.model
         checkpoints_cfg = cfg['checkpoints']
         date_string =  datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
         callbacks = []
         ckpt_home = checkpoints_cfg.get('dirpath', 'checkpoints') # keep the original ckpt home
 
-        if debug:
+        if debug: # set wand
             ilogger.info("Debug mode (without wandb and callbacks)...")
             wandb_logger = None
             save_dir = os.path.join(ckpt_home, f'debug_{date_string}')
@@ -579,20 +579,20 @@ class OmniRunModule(LightningModule):
                 save_dir = os.path.dirname(cfg.resume_from_ckpt)
                 # ckpt_dir = os.path.join(ckpt_dir, wandb_logger.experiment.id, cfg.wandb.name)
 
-            # Model checkpoints
-            checkpoints_cfg['dirpath'] = save_dir
-            ilogger.info(f"Checkpoints saved to {save_dir}")
-            callbacks.append(ModelCheckpoint(**checkpoints_cfg))
-            callbacks.append(LearningRateMonitor(**cfg.lr_monitor))
-            callbacks.append(EarlyStopping(**cfg.early_stopping))
-            callbacks.append(NanGradientCallback())
-            # if cfg.run.trainer.progress_bar_refresh_rate > 0:
-                # callbacks.append(RichProgressBar(refresh_rate=cfg.run.trainer.progress_bar_refresh_rate))
-                # callbacks.append(TQDMProgressBar(refresh_rate=cfg.run.trainer.progress_bar_refresh_rate))
-            # if cfg.run.trainer.detect_anomaly:
-                # torch.autograd.set_detect_anomaly(True)
-                # ilogger.warning("Anomaly detection is enabled. Training will be slow!")
-                #
+        # Model checkpoints
+        checkpoints_cfg['dirpath'] = save_dir
+        ilogger.info(f"Checkpoints saved to {save_dir}")
+        callbacks.append(ModelCheckpoint(**checkpoints_cfg))
+        callbacks.append(LearningRateMonitor(**cfg.lr_monitor))
+        callbacks.append(EarlyStopping(**cfg.early_stopping))
+        callbacks.append(NanGradientCallback())
+        # if cfg.run.trainer.progress_bar_refresh_rate > 0:
+            # callbacks.append(RichProgressBar(refresh_rate=cfg.run.trainer.progress_bar_refresh_rate))
+            # callbacks.append(TQDMProgressBar(refresh_rate=cfg.run.trainer.progress_bar_refresh_rate))
+        # if cfg.run.trainer.detect_anomaly:
+            # torch.autograd.set_detect_anomaly(True)
+            # ilogger.warning("Anomaly detection is enabled. Training will be slow!")
+            #
 
         # save_conf is solely for saving purposes
         if save_cfg is not None:

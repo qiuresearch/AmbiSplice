@@ -299,18 +299,19 @@ def calc_benchmark(preds, labels, C_dim=1, exclude_dim=None, eps=1e-8):
     Returns:
         all_metrics: dict of metrics, each value is a scalar or a numpy array
     """
+    
+    assert preds['cls'].ndim == labels['cls'].ndim + 1, "Dimension mismatch between preds['cls'] and labels['cls']+1."
+    
     if exclude_dim is not None and utils.is_scalar(exclude_dim):
         exclude_dim = [int(exclude_dim)]
 
     if exclude_dim:
         assert len(exclude_dim) == 1, "Only support excluding one dimension for individual metrics."
         dim_size = labels['cls'].shape[exclude_dim[0]]
-
         E_dim = exclude_dim[0]
-        if E_dim < 0:
-            E_dim = labels['cls'].ndim + E_dim
-        if C_dim < 0:
-            C_dim = labels['cls'].ndim + C_dim
+        assert E_dim >= 0, "exclude_dim must be non-negative."
+
+        C_dim = (C_dim + preds['cls'].ndim) % preds['cls'].ndim
         assert E_dim != C_dim, "Cannot exclude the class dimension."
 
         if C_dim > E_dim:

@@ -204,7 +204,7 @@ def get_litdata(torch_datasets, dataloader_cfg: DictConfig):
     return litdata
 
 
-def get_litrun(litrun_cfg: DictConfig, model: nn.Module):
+def get_litrun(model: nn.Module, litrun_cfg: DictConfig):
     litrun = litrun_module.OmniRunModule(model=model, cfg=litrun_cfg)
     ilogger.info(f"Initialized litrun with config:\n{OmegaConf.to_yaml(litrun_cfg)}")
     return litrun
@@ -215,7 +215,7 @@ def get_ensemble_litruns(main_cfg, model=None):
         Only handle two config cases: main_cfg.ensemble.model and main_cfgensemble.litrun
     """
 
-    def get_ensemble_cfgs(ensemble_cfg):
+    def _get_ensemble_cfgs(ensemble_cfg):
         """ Convert ensemble_cfg.model to a list of model cfgs."""
         ilogger.info(f"Ensemble config:\n{OmegaConf.to_yaml(ensemble_cfg)}")
         cfgs = []
@@ -228,8 +228,8 @@ def get_ensemble_litruns(main_cfg, model=None):
                 cfgs[i][key] = v
         return cfgs
 
-    model_cfgs = get_ensemble_cfgs(main_cfg.ensemble.model) if main_cfg.ensemble.model is not None else None
-    litrun_cfgs = get_ensemble_cfgs(main_cfg.ensemble.litrun) if main_cfg.ensemble.litrun is not None else None
+    model_cfgs = _get_ensemble_cfgs(main_cfg.ensemble.model) if main_cfg.ensemble.model is not None else None
+    litrun_cfgs = _get_ensemble_cfgs(main_cfg.ensemble.litrun) if main_cfg.ensemble.litrun is not None else None
 
     ensemble_size = max(len(model_cfgs) if model_cfgs else 0,
                         len(litrun_cfgs) if litrun_cfgs else 0)
@@ -276,7 +276,7 @@ def main(main_cfg: DictConfig):
     #           9 0.00419190875022965 0.004320022200705696
     #           10 0.004074970081213211 0.004217715382484738
     # 8) eight models are trained separately for four tissues. One for 'cls' and one for 'psi' in each tissue.
-    # 9) three models are averaged for final prediction
+    # 9) three to five models are averaged for final prediction
 
     # cfg_path = os.path.join(os.getcwd(), 'configs', 'train.yaml')
     # main_cfg = omegaconf.OmegaConf.load(cfg_path)
@@ -285,7 +285,7 @@ def main(main_cfg: DictConfig):
     accelerator, devices = get_accelerator_devices(gpus=main_cfg.gpus)
 
     torch_model = get_torch_model(main_cfg.model)
-    litrun = get_litrun(main_cfg.litrun, torch_model)
+    litrun = get_litrun(torch_model, main_cfg.litrun)
 
     torch_datasets = get_torch_datasets(main_cfg.dataset)
     litdata = get_litdata(torch_datasets, main_cfg.dataloader)
