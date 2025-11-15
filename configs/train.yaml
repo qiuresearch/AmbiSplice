@@ -68,14 +68,14 @@ litrun:
     lr_T_mult: 2
     last_lr_step: -1
   trainer:
+    overfit_batches: 0 # 0 means all batches used
     min_epochs: 3
     max_epochs: 21
     max_time: "7:00:00:00"  # D:HH:MM:SS
     strategy: auto
     precision: 32
-    overfit_batches: 0 # 0 means all batches used
-    log_every_n_steps: 1
     deterministic: false
+    log_every_n_steps: 1
     check_val_every_n_epoch: 1
     accumulate_grad_batches: 1
   wandb:
@@ -99,7 +99,6 @@ litrun:
     auto_insert_metric_name: false
     save_weights_only: false
     save_last: true
-    save_on_exception: false
     save_top_k: -1 # 0: no model saved; -1: all models saved
     monitor: val_loss
     mode: min
