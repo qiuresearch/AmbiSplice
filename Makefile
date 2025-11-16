@@ -278,8 +278,8 @@ eval_pangolinorig_pangolin: ## Evaluate Pangolin original model
 	models=(final.1.3.3 final.2.3.3 final.3.3.3 final.4.3.3 final.5.3.3 final.1.3.3.v2 final.2.3.3.v2 final.3.3.3.v2)
 	models+=(final.1.4.3 final.2.4.3 final.3.4.3 final.4.4.3 final.5.4.3 final.1.4.3.v2 final.2.4.3.v2 final.3.4.3.v2)
 	models=(final.1.0.3 final.2.0.3 final.3.0.3 final.4.0.3 final.5.0.3 final.1.0.3.v2 final.2.0.3.v2 final.3.0.3.v2)
-	models=(final.1.1.3 final.2.1.3 final.3.1.3 final.4.1.3 final.5.1.3 final.1.1.3.v2 final.2.1.3.v2 final.3.1.3.v2)
-	models+=(final.1.2.3 final.2.2.3 final.3.2.3 final.4.2.3 final.5.2.3 final.1.2.3.v2 final.2.2.3.v2 final.3.2.3.v2)	
+# 	models=(final.1.1.3 final.2.1.3 final.3.1.3 final.4.1.3 final.5.1.3 final.1.1.3.v2 final.2.1.3.v2 final.3.1.3.v2)
+# 	models+=(final.1.2.3 final.2.2.3 final.3.2.3 final.4.2.3 final.5.2.3 final.1.2.3.v2 final.2.2.3.v2 final.3.2.3.v2)	
 	for model in $${models[@]} ; do
 		conda run --no-capture-output --name $(CONDA_ENV_NAME) \
 		python -u run.py stage=eval \
