@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 import os
 import datetime
 import numpy as np
@@ -253,7 +254,7 @@ def get_ensemble_litruns(main_cfg, model=None):
     return litruns
     
 
-@hydra.main(version_base=None, config_path="./configs", config_name="train.yaml")
+@hydra.main(version_base=None, config_path="./", config_name="config.yaml")
 def main(main_cfg: DictConfig):
     # From Pangolin: 
     # 1) no dropout!!!
