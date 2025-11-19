@@ -140,7 +140,11 @@ class RNALengthBatcher:
         if pad_multiples_of is not None:
             self.sample_lengths = np.ceil(self.sample_lengths / pad_multiples_of) * pad_multiples_of
         self.num_samples = len(self.sample_lengths)
-
+        self.seed = seed
+        self.shuffle = shuffle
+        self.epoch = 0
+        self.max_batch_size =  self._sampler_cfg['max_batch_size']
+        
         # Group indices by lengths for efficient batching (akin to pandas groupby)
         sorted_indices = np.argsort(self.sample_lengths)
         sorted_lengths = self.sample_lengths[sorted_indices]
@@ -164,14 +168,12 @@ class RNALengthBatcher:
         if self._sampler_cfg['linear_effect']:
             self.num_batches = self.sample_lengths.sum() / self._sampler_cfg['max_num_res_squared'] / self.num_replicas
         else:
-            self.num_batches = (self.sample_lengths **2).sum() / self._sampler_cfg['max_num_res_squared'] / self.num_replicas
-        self.num_batches = math.ceil(self.num_batches) + len(self.length_group_indices)
+            self.num_batches = (self.sample_lengths ** 2).sum() / self._sampler_cfg['max_num_res_squared'] / self.num_replicas
+        self.num_batches = max(
+            math.ceil(self.num_batches) + len(self.length_group_indices),
+            math.ceil(self.num_samples / self.max_batch_size),
+        )
 
-        self.seed = seed
-        self.shuffle = shuffle
-        self.epoch = 0
-        self.max_batch_size =  self._sampler_cfg['max_batch_size']
-        
     def _replica_epoch_batches(self):
         # Make sure all replicas share the same seed on each epoch.
         rng = np.random.default_rng(self.seed + self.epoch)
@@ -226,7 +228,7 @@ class RNALengthBatcher:
                 raise ValueError('Exceeded number of augmentations.')
         if len(all_batches) >= self.num_batches:
             all_batches = all_batches[:self.num_batches]
-        # print(all_batches[0:5])
+        # print(all_batches[-5:0])
         self.sample_batches = all_batches
 
     def __iter__(self):
@@ -239,7 +241,6 @@ class RNALengthBatcher:
             return len(self.sample_batches)
         else:
             return self.num_batches
-
 
 # class MyBatchCollator:
 #     """ batch_dim: whether batch dim already exists in the input 

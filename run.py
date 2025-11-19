@@ -191,23 +191,23 @@ def get_torch_datasets(dataset_cfg: DictConfig):
     else:
         raise ValueError(f"Unknown dataset type: {dataset_cfg.type}")
 
-    ilogger.info(f'Initialized datasets with config:\n{OmegaConf.to_yaml(dataset_cfg)}')
+    ilogger.info(f'Initialized datasets with config') # :\n{OmegaConf.to_yaml(dataset_cfg)}')
     return {'train': train_set, 'val': val_set, 'test': test_set, 'predict': predict_set}
 
 
-def get_litdata(torch_datasets, dataloader_cfg: DictConfig):
+def get_litdata(torch_datasets, datamodule_cfg: DictConfig):
     litdata = litdata_module.OmniDataModule(train_dataset=torch_datasets['train'],
                                        val_dataset=torch_datasets['val'],
                                        test_dataset=torch_datasets['test'],
                                        predict_dataset=torch_datasets['predict'],
-                                       **dataloader_cfg)
-    ilogger.info(f"Initialized litdata with config:\n{OmegaConf.to_yaml(dataloader_cfg)}")
+                                       **datamodule_cfg)
+    ilogger.info(f"Initialized litdata with config") #:\n{OmegaConf.to_yaml(datamodule_cfg)}")
     return litdata
 
 
 def get_litrun(model: nn.Module, litrun_cfg: DictConfig):
     litrun = litrun_module.OmniRunModule(model=model, cfg=litrun_cfg)
-    ilogger.info(f"Initialized litrun with config:\n{OmegaConf.to_yaml(litrun_cfg)}")
+    ilogger.info(f"Initialized litrun with config") #:\n{OmegaConf.to_yaml(litrun_cfg)}")
     return litrun
 
 
@@ -289,7 +289,7 @@ def main(main_cfg: DictConfig):
     litrun = get_litrun(torch_model, main_cfg.litrun)
 
     torch_datasets = get_torch_datasets(main_cfg.dataset)
-    litdata = get_litdata(torch_datasets, main_cfg.dataloader)
+    litdata = get_litdata(torch_datasets, main_cfg.datamodule)
 
     if main_cfg.stage in ('train', 'training', 'fit'):
         # ilogger.info(f"Training model with config:\n{omegaconf.OmegaConf.to_yaml(main_cfg)}")

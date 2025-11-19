@@ -11,8 +11,9 @@ CONDA_PREFIX?=$(HOME)/miniconda3
 CONDA_SH_PATH?=$(CONDA_PREFIX)/etc/profile.d/conda.sh
 CONDA_ENV_NAME?=ambisplice
 
-debug=false
 gpus=0
+debug=false
+sbatch=false
 predict_size=20000
 
 help: ## Display this help message
@@ -20,6 +21,16 @@ help: ## Display this help message
 	@echo
 	@echo "Available targets:"
 	@grep -E '^[0-9a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-42s\033[0m %s\n", $$1, $$2}'
+
+sbatch: ## submit the action via sbatch
+	@if [ "$(sbatch)" = "true" ] ; then \
+		sbatch_file=sbatch ; sbatch_cmds=() ; \
+		for goal in $(MAKECMDGOALS) ; do sbatch_file=$${sbatch_file}_$${goal} ; sbatch_cmds+=(make $${goal} \; ) ; done ; \
+		sbatch_brew.sh -p small-gpu -t 7-00:00:00 -o "$${sbatch_file}.sh" "$${sbatch_cmds[*]}" ; \
+		echo "Submitting via sbatch ..." ; \
+		sbatch $${sbatch_file} ; \
+		exit 1 ; \
+	fi
 
 install: ## Install python dependencies under conda environment
 	source $(CONDA_SH_PATH)
@@ -51,7 +62,7 @@ download_pangolin_genomes: ## Download Pangolin genomes
 	faidx Macaca_mulatta.Mmul_10.dna.toplevel.fa
 	faidx Rattus_norvegicus.Rnor_6.0.dna.toplevel.fa
 
-eval_pangolinomni3_pangolinsolo123: ## Evaluate PangolinOmni3 model trained on PangolinSolo123 dataset
+eval_pangolinomni3_pangolinsolo123: sbatch ## Evaluate PangolinOmni3 model trained on PangolinSolo123 dataset
 	ckpt_dir=checkpoints/pangolinomni3.pangolinsolo123_2025-11-11_00-04-02_97d417l3
 	ckpt_path="$${ckpt_dir}/best.ckpt"
 	tissues=(liver)
@@ -305,8 +316,8 @@ train_pangolinsolo_pangolinsolo123: ## Train PangolinSolo model on PangolinSolo 
 		dataset.type=pangolinsolo \
 		+dataset.tissue_types=[heart,liver,brain] \
 		dataset.train_path=data/pangolin/dataset_train_all.h5 \
-		dataloader.train_batch_size=96 \
-		dataloader.val_batch_size=128 \
+		datamodule.train_batch_size=96 \
+		datamodule.val_batch_size=128 \
 		litrun.resume_from_ckpt=null \
 		debug=$(debug)
 
@@ -319,8 +330,8 @@ train_pangolinsolo_pangolinsolo124: ## Train PangolinSolo model on PangolinSolo 
 		dataset.type=pangolinsolo \
 		+dataset.tissue_types=[heart,liver,testis] \
 		dataset.train_path=data/pangolin/dataset_train_all.h5 \
-		dataloader.train_batch_size=96 \
-		dataloader.val_batch_size=128 \
+		datamodule.train_batch_size=96 \
+		datamodule.val_batch_size=128 \
 		litrun.resume_from_ckpt=null \
 		debug=$(debug)
 
@@ -333,8 +344,8 @@ train_pangolinsolo_pangolinsolo1: ## Train PangolinSolo model on PangolinSolo da
 		dataset.type=pangolinsolo \
 		+dataset.tissue_types=[heart] \
 		dataset.train_path=data/pangolin/dataset_train_all.h5 \
-		dataloader.train_batch_size=96 \
-		dataloader.val_batch_size=128 \
+		datamodule.train_batch_size=96 \
+		datamodule.val_batch_size=128 \
 		litrun.resume_from_ckpt=null \
 		debug=$(debug)
 
@@ -347,8 +358,8 @@ train_pangolinsolo_pangolinsolo2: ## Train PangolinSolo model on PangolinSolo 2 
 		dataset.type=pangolinsolo \
 		+dataset.tissue_types=[liver] \
 		dataset.train_path=data/pangolin/dataset_train_all.h5 \
-		dataloader.train_batch_size=96 \
-		dataloader.val_batch_size=128 \
+		datamodule.train_batch_size=96 \
+		datamodule.val_batch_size=128 \
 		litrun.resume_from_ckpt=null \
 		debug=$(debug)
 
@@ -361,8 +372,8 @@ train_pangolinsolo_pangolinsolo3: ## Train PangolinSolo model on PangolinSolo da
 		dataset.type=pangolinsolo \
 		+dataset.tissue_types=[brain] \
 		dataset.train_path=data/pangolin/dataset_train_all.h5 \
-		dataloader.train_batch_size=96 \
-		dataloader.val_batch_size=128 \
+		datamodule.train_batch_size=96 \
+		datamodule.val_batch_size=128 \
 		litrun.resume_from_ckpt=null \
 		debug=$(debug)
 
@@ -375,8 +386,8 @@ train_pangolinsolo_pangolinsolo4: ## Train PangolinSolo model on PangolinSolo da
 		dataset.type=pangolinsolo \
 		+dataset.tissue_types=[testis] \
 		dataset.train_path=data/pangolin/dataset_train_all.h5 \
-		dataloader.train_batch_size=96 \
-		dataloader.val_batch_size=128 \
+		datamodule.train_batch_size=96 \
+		datamodule.val_batch_size=128 \
 		litrun.resume_from_ckpt=null \
 		debug=$(debug)
 		
@@ -390,8 +401,8 @@ train_pangolinomni_pangolinsolo123: ## Train PangolinOmni model on PangolinSolo 
 		dataset.train_path=data/pangolin/dataset_train_all.h5 \
 		+dataset.tissue_types=[heart,liver,brain] \
 		+dataset.tissue_embedding_path="data/tissue_avg_pca_embeddings.csv" \
-		dataloader.train_batch_size=96 \
-		dataloader.val_batch_size=128 \
+		datamodule.train_batch_size=96 \
+		datamodule.val_batch_size=128 \
 		litrun.resume_from_ckpt=null \
 		debug=$(debug)
 
@@ -405,8 +416,8 @@ train_pangolinomni2_pangolinsolo123: ## Train PangolinOmni2 model on PangolinSol
 		dataset.train_path=data/pangolin/dataset_train_all.h5 \
 		+dataset.tissue_types=[heart,liver,brain] \
 		+dataset.tissue_embedding_path="data/tissue_avg_pca_embeddings.csv" \
-		dataloader.train_batch_size=96 \
-		dataloader.val_batch_size=128 \
+		datamodule.train_batch_size=96 \
+		datamodule.val_batch_size=128 \
 		litrun.resume_from_ckpt=null \
 		debug=$(debug)
 
@@ -420,8 +431,8 @@ train_pangolinomni3_pangolinsolo123: ## Train PangolinOmni3 model on PangolinSol
 		dataset.train_path=data/pangolin/dataset_train_all.h5 \
 		+dataset.tissue_types=[heart,liver,brain] \
 		+dataset.tissue_embedding_path="data/tissue_avg_pca_embeddings.csv" \
-		dataloader.train_batch_size=96 \
-		dataloader.val_batch_size=128 \
+		datamodule.train_batch_size=96 \
+		datamodule.val_batch_size=128 \
 		litrun.resume_from_ckpt=null \
 		debug=$(debug)		
 
@@ -433,8 +444,8 @@ train_pangolin_pangolin: ## Train Pangolin model on Pangolin dataset (all four t
 		dataset.type=pangolin \
 		dataset.train_path=data/pangolin/dataset_train_all.h5 \
 		+dataset.tissue_types=[heart,liver,brain,testis] \
-		dataloader.train_batch_size=96 \
-		dataloader.val_batch_size=128 \
+		datamodule.train_batch_size=96 \
+		datamodule.val_batch_size=128 \
 		litrun.resume_from_ckpt=null \
 		debug=$(debug)
 
@@ -445,8 +456,8 @@ train_splicesolo_genecrops: ## Train SpliceSolo on genecrops dataset
 		model.state_dict_path=null \
 		dataset.type=genecrops \
 		dataset.train_path=data/gwsplice_genecrops.h5 \
-		dataloader.train_batch_size=96 \
-		dataloader.val_batch_size=128 \
+		datamodule.train_batch_size=96 \
+		datamodule.val_batch_size=128 \
 		litrun.resume_from_ckpt=null \
 		debug=$(debug)
 
@@ -460,7 +471,7 @@ train_splicesolo_genesites: ## Train SpliceSolo on gene sites dataset
 		+dataset.stratified_sampling=chrom \
 		+dataset.weighted_sampling=len \
 		+dataset.dynamic_weights=false \
-		dataloader.train_batch_size=96 \
-		dataloader.val_batch_size=128 \
+		datamodule.train_batch_size=96 \
+		datamodule.val_batch_size=128 \
 		litrun.resume_from_ckpt=null \
 		debug=$(debug)
