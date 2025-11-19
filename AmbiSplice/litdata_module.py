@@ -1,5 +1,6 @@
-import os
 import math
+import os
+import numpy as np
 from beartype.typing import Any, Dict, Optional
 
 import torch
@@ -10,7 +11,7 @@ from pytorch_lightning import LightningDataModule
 
 class OmniDataModule(LightningDataModule):
     def __init__(self, train_dataset=None, val_dataset=None, test_dataset=None, predict_dataset=None,
-                 batch_size=16, num_workers=4, sampler=None, collater=None,
+                 batch_size=16, num_workers=4, batch_sampler=None, collater=None,
                  **kwargs):
         super().__init__()
         
@@ -21,23 +22,40 @@ class OmniDataModule(LightningDataModule):
 
         self.batch_size = batch_size
         self.num_workers = num_workers
-        self.sampler = sampler # not used yet
+        self.batch_sampler = batch_sampler
         self.collater = collater # not used yet
 
         self.cfg = kwargs
-        self.save_hyperparameters(logger=False, ignore=['train_dataset', 'val_dataset', 'test_dataset', 'predict_dataset', 'sampler', 'collater'])
-
+        self.save_hyperparameters(logger=False, ignore=['train_dataset', 'val_dataset', 'test_dataset', 'predict_dataset', 'batch_sampler', 'collater'])
 
     def train_dataloader(self, rank=None, num_replicas=None):
         if self.train_dataset is None:
             return None
+
+        if self.batch_sampler is None:
+            dataloader_cfg = {
+                'shuffle': self.cfg.get('train_shuffle', True),
+                'batch_size': self.cfg.get('train_batch_size', self.batch_size),
+            }
+        elif self.batch_sampler.upper() == 'RNALength'.upper():
+            dataloader_cfg = {
+                'batch_sampler': RNALengthBatcher(
+                sampler_cfg=self.cfg,
+                sample_lengths=self.train_dataset.get_sample_lengths(),
+                pad_multiples_of=self.cfg.get('pad_multiples_of', None),
+                rank=rank,
+                num_replicas=num_replicas,
+                )
+            }
+        else:
+            raise ValueError(f"Unknown batch_sampler: {self.batch_sampler}")
+        
         return DataLoader(self.train_dataset, 
-                          shuffle=self.cfg.get('train_shuffle', True),
-                          batch_size=self.cfg.get('train_batch_size', self.batch_size),
                           num_workers=self.cfg.get('train_num_workers', self.num_workers),
                           prefetch_factor=self.cfg.get('train_prefetch_factor', 2),
                           pin_memory=self.cfg.get('train_pin_memory', True),
                           persistent_workers=self.cfg.get('train_persistent_workers', True),
+                          **dataloader_cfg
                           )
     def val_dataloader(self):
         if self.val_dataset is None:
@@ -94,7 +112,8 @@ class RNALengthBatcher:
     def __init__(
             self,
             sampler_cfg,
-            metadata_csv,
+            sample_lengths,
+            pad_multiples_of=None,
             seed=123,
             shuffle=True,
             num_replicas=None,
@@ -102,57 +121,97 @@ class RNALengthBatcher:
         ):
         super().__init__()
         if num_replicas is None:
-            self.num_replicas = dist.get_world_size()
+            if not dist.is_available() or not dist.is_initialized():
+                self.num_replicas = 1
+            else:
+                self.num_replicas = dist.get_world_size()
         else:
             self.num_replicas = num_replicas
         if rank is None:
-            self.rank = dist.get_rank()
+            if not dist.is_available() or not dist.is_initialized():
+                self.rank = 0
+            else:
+                self.rank = dist.get_rank()
         else:
             self.rank = rank
 
         self._sampler_cfg = sampler_cfg
-        self._data_csv = metadata_csv
+        self.sample_lengths = sample_lengths
+        if pad_multiples_of is not None:
+            self.sample_lengths = np.ceil(self.sample_lengths / pad_multiples_of) * pad_multiples_of
+        self.num_samples = len(self.sample_lengths)
+
+        # Group indices by lengths for efficient batching (akin to pandas groupby)
+        sorted_indices = np.argsort(self.sample_lengths)
+        sorted_lengths = self.sample_lengths[sorted_indices]
+        unique_indices = np.where(sorted_lengths[1:] != sorted_lengths[:-1])[0]
+        if len(unique_indices) == 0:
+            print("Warning: all samples have the same length.")
+            unique_indices = np.array([0, len(sorted_lengths)])
+        else:
+            unique_indices = np.concatenate(([0], unique_indices+1, [len(sorted_lengths)]))
+
+        length_group_indices = {}
+        for i in range(len(unique_indices) - 1):
+            length = sorted_lengths[unique_indices[i]]
+            length_group_indices[length] = sorted_indices[unique_indices[i]:unique_indices[i+1]]
+            
+        self.length_group_indices = length_group_indices
+        
         # Each replica needs the same number of batches. We set the number
         # of batches to arbitrarily be the number of examples per replica.
-        self._num_batches = math.ceil(len(self._data_csv) / self.num_replicas)
-        self._data_csv['index'] = list(range(len(self._data_csv)))
+        # self.num_batches = int(np.ceil(self.num_samples / self.num_replicas))
+        if self._sampler_cfg['linear_effect']:
+            self.num_batches = self.sample_lengths.sum() / self._sampler_cfg['max_num_res_squared'] / self.num_replicas
+        else:
+            self.num_batches = (self.sample_lengths **2).sum() / self._sampler_cfg['max_num_res_squared'] / self.num_replicas
+        self.num_batches = math.ceil(self.num_batches) + len(self.length_group_indices)
+
         self.seed = seed
         self.shuffle = shuffle
         self.epoch = 0
-        self.max_batch_size =  self._sampler_cfg.max_batch_size
+        self.max_batch_size =  self._sampler_cfg['max_batch_size']
         
     def _replica_epoch_batches(self):
         # Make sure all replicas share the same seed on each epoch.
-        rng = torch.Generator()
-        rng.manual_seed(self.seed + self.epoch)
-        if self.shuffle:
-            indices = torch.randperm(len(self._data_csv), generator=rng).tolist()
-        else:
-            indices = list(range(len(self._data_csv)))
+        rng = np.random.default_rng(self.seed + self.epoch)
+        
+        # Each batch contains multiple RNAs of the same length.
+        sample_batches = []
+        for grp_len, grp_indices in self.length_group_indices.items():
 
-        if len(self._data_csv) > self.num_replicas:
-            replica_csv = self._data_csv.iloc[
-                indices[self.rank::self.num_replicas]
-            ]
-        else:
-            replica_csv = self._data_csv
-        
-        # Each batch contains multiple RNA of the same length.
-        sample_order = []
-        for seq_len, len_df in replica_csv.groupby('modeled_na_seq_len'):
-            max_batch_size = min(
-                self.max_batch_size,
-                self._sampler_cfg.max_num_res_squared // seq_len**2 + 1,
-            )
-            num_batches = math.ceil(len(len_df) / max_batch_size)
+            if self.shuffle:
+                indices2grp = rng.permutation(len(grp_indices))
+            else:
+                indices2grp = np.arange(len(grp_indices))
+
+            if len(grp_indices) > self.num_replicas > 1:
+                replica_indices = grp_indices[indices2grp[self.rank::self.num_replicas]]
+            else:
+                replica_indices = grp_indices[indices2grp]
+
+            if self._sampler_cfg['linear_effect']:
+                max_batch_size = min(
+                    self.max_batch_size,
+                    self._sampler_cfg['max_num_res_squared'] // grp_len + 1,
+                )
+            else:
+                max_batch_size = min(
+                    self.max_batch_size,
+                    self._sampler_cfg['max_num_res_squared'] // grp_len**2 + 1,
+                )
+                
+            max_batch_size = int(max_batch_size)
+            num_batches = math.ceil(len(replica_indices) / max_batch_size)
             for i in range(num_batches):
-                batch_df = len_df.iloc[i*max_batch_size:(i+1)*max_batch_size]
-                batch_indices = batch_df['index'].tolist()
-                sample_order.append(batch_indices)
+                batch_indices = replica_indices[i*max_batch_size:(i+1)*max_batch_size]
+                assert all(self.sample_lengths[batch_indices] == self.sample_lengths[batch_indices[0]]), \
+                    f"Batch contains different lengths: {self.sample_lengths[batch_indices]}"
+                sample_batches.append(batch_indices)
         
-        # Remove any length bias.
-        new_order = torch.randperm(len(sample_order), generator=rng).numpy().tolist()
-        return [sample_order[i] for i in new_order]
+        # Remove any length bias
+        rng.shuffle(sample_batches)
+        return sample_batches
 
     def _create_batches(self):
         # Make sure all replicas have the same number of batches Otherwise leads to bugs.
@@ -160,26 +219,27 @@ class RNALengthBatcher:
 
         all_batches = []
         num_augments = -1
-        while len(all_batches) < self._num_batches:
+        while len(all_batches) < self.num_batches:
             all_batches.extend(self._replica_epoch_batches())
             num_augments += 1
             if num_augments > 1000:
                 raise ValueError('Exceeded number of augmentations.')
-        if len(all_batches) >= self._num_batches:
-            all_batches = all_batches[:self._num_batches]
-        self.sample_order = all_batches
+        if len(all_batches) >= self.num_batches:
+            all_batches = all_batches[:self.num_batches]
+        # print(all_batches[0:5])
+        self.sample_batches = all_batches
 
     def __iter__(self):
         self._create_batches()
         self.epoch += 1
-        return iter(self.sample_order)
+        return iter(self.sample_batches)
 
     def __len__(self):
-        if hasattr(self, "sample_order"):
-            return len(self.sample_order)
+        if hasattr(self, "sample_batches"):
+            return len(self.sample_batches)
         else:
-            return self._num_batches
-        
+            return self.num_batches
+
 
 # class MyBatchCollator:
 #     """ batch_dim: whether batch dim already exists in the input 
