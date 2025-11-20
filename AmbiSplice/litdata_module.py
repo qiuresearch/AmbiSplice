@@ -60,7 +60,13 @@ class OmniDataModule(LightningDataModule):
     def val_dataloader(self):
         if self.val_dataset is None:
             return None
-        # val_sampler = DistributedSampler(self.val_dataset, shuffle=False)
+        if dist.is_available() and dist.is_initialized():
+            dataloader_cfg = {
+                'sampler': DistributedSampler(self.val_dataset, shuffle=False),
+            }
+        else:
+            dataloader_cfg = {}
+
         return DataLoader(self.val_dataset, 
                           shuffle=self.cfg.get('val_shuffle', False),
                           batch_size=self.cfg.get('val_batch_size', self.batch_size),
@@ -68,6 +74,7 @@ class OmniDataModule(LightningDataModule):
                           prefetch_factor=self.cfg.get('val_prefetch_factor', 2),
                           pin_memory=self.cfg.get('val_pin_memory', True),
                           persistent_workers=self.cfg.get('val_persistent_workers', True),
+                          **dataloader_cfg,
                           )
     def test_dataloader(self):
         if self.test_dataset is None:
