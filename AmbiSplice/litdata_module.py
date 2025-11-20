@@ -32,7 +32,7 @@ class OmniDataModule(LightningDataModule):
         if self.train_dataset is None:
             return None
 
-        if self.batch_sampler is None:
+        if not self.batch_sampler:
             dataloader_cfg = {
                 'shuffle': self.cfg.get('train_shuffle', True),
                 'batch_size': self.cfg.get('train_batch_size', self.batch_size),

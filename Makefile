@@ -22,13 +22,13 @@ help: ## Display this help message
 	@echo "Available targets:"
 	@grep -E '^[0-9a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-42s\033[0m %s\n", $$1, $$2}'
 
-sbatch: ## submit the action via sbatch
+sbatch_redirect: ## Redirect the action to sbatch instead of interactive running
 	@if [ "$(sbatch)" = "true" ] ; then \
 		sbatch_file=sbatch ; sbatch_cmds=() ; \
 		for goal in $(MAKECMDGOALS) ; do sbatch_file=$${sbatch_file}_$${goal} ; sbatch_cmds+=(make $${goal} \; ) ; done ; \
 		sbatch_brew.sh -p small-gpu -t 7-00:00:00 -o "$${sbatch_file}.sh" "$${sbatch_cmds[*]}" ; \
 		echo "Submitting via sbatch ..." ; \
-		sbatch $${sbatch_file} ; \
+		sbatch "$${sbatch_file}.sh" ; \
 		exit 1 ; \
 	fi
 
@@ -406,7 +406,7 @@ train_pangolinomni_pangolinsolo123: ## Train PangolinOmni model on PangolinSolo 
 		litrun.resume_from_ckpt=null \
 		debug=$(debug)
 
-train_pangolinomni2_pangolinsolo123: ## Train PangolinOmni2 model on PangolinSolo dataset
+train_pangolinomni2_pangolinsolo123: sbatch_redirect ## Train PangolinOmni2 model on PangolinSolo dataset
 	conda run --no-capture-output --name $(CONDA_ENV_NAME) \
 	python -u run.py stage=train gpus=[$(gpus)] \
 		run_name=pangolinomni2.pangolinsolo123 \
@@ -421,7 +421,7 @@ train_pangolinomni2_pangolinsolo123: ## Train PangolinOmni2 model on PangolinSol
 		litrun.resume_from_ckpt=null \
 		debug=$(debug)
 
-train_pangolinomni3_pangolinsolo123: ## Train PangolinOmni3 model on PangolinSolo dataset
+train_pangolinomni3_pangolinsolo123: sbatch_redirect ## Train PangolinOmni3 model on PangolinSolo dataset
 	conda run --no-capture-output --name $(CONDA_ENV_NAME) \
 	python -u run.py stage=train gpus=[$(gpus)] \
 		run_name=pangolinomni3.pangolinsolo123 \
@@ -436,7 +436,7 @@ train_pangolinomni3_pangolinsolo123: ## Train PangolinOmni3 model on PangolinSol
 		litrun.resume_from_ckpt=null \
 		debug=$(debug)		
 
-train_pangolin_pangolin: ## Train Pangolin model on Pangolin dataset (all four tissues)
+train_pangolin_pangolin: sbatch_redirect ## Train Pangolin model on Pangolin dataset (all four tissues)
 	conda run --no-capture-output --name $(CONDA_ENV_NAME) \
 	python -u run.py stage=train gpus=[$(gpus)] \
 		model.type=pangolin \
@@ -449,7 +449,7 @@ train_pangolin_pangolin: ## Train Pangolin model on Pangolin dataset (all four t
 		litrun.resume_from_ckpt=null \
 		debug=$(debug)
 
-train_splicesolo_genecrops: ## Train SpliceSolo on genecrops dataset
+train_splicesolo_genecrops: sbatch_redirect ## Train SpliceSolo on genecrops dataset
 	conda run --no-capture-output --name $(CONDA_ENV_NAME) \
 	python -u run.py stage=train gpus=[$(gpus)] \
 		model.type=SpliceSolo \
@@ -461,7 +461,7 @@ train_splicesolo_genecrops: ## Train SpliceSolo on genecrops dataset
 		litrun.resume_from_ckpt=null \
 		debug=$(debug)
 
-train_splicesolo_genesites: ## Train SpliceSolo on gene sites dataset
+train_splicesolo_genesites: sbatch_redirect ## Train SpliceSolo on gene sites dataset
 	conda run --no-capture-output --name $(CONDA_ENV_NAME) \
 	python -u run.py stage=train gpus=[$(gpus)] \
 		model.type=splicesolo \
