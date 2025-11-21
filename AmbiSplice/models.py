@@ -54,30 +54,30 @@ class SpliceBaseModule(nn.Module):
         # psi has shape (B, ,..., crop_size)
         # 2) cls_odds and psi_std are not used currently
 
-        loss_items = {}
+        avg_losses = {}
         if 'cls' not in labels or 'psi' not in labels:
-            return -1, loss_items
+            return -1, avg_losses
         
         # four classes: non, acceptor, donor, hybrid
-        loss_items['cls_loss'] = F.cross_entropy(
+        avg_losses['cls_loss'] = F.cross_entropy(
             preds['cls_logits'],
             labels['cls'],
             ignore_index=-100)
 
         # psi is a probability between 0 and 1
-        loss_items['psi_loss'] = F.binary_cross_entropy_with_logits(
+        avg_losses['psi_loss'] = F.binary_cross_entropy_with_logits(
             preds['psi_logits'],
             labels['psi'],
             weight=labels['psi'] >= 0,  # mask out negative values
             reduction='mean')
 
-        loss = loss_items['cls_loss'] + loss_items['psi_loss']
-        loss_items['loss'] = loss
+        train_loss = avg_losses['cls_loss'] + avg_losses['psi_loss']
+        avg_losses['loss'] = train_loss
 
-        for k in loss_items: # do not move to cpu here, let the caller do it
-            loss_items[k] = loss_items[k].detach().cpu()
+        for k in avg_losses: # Move to CPU here, because of too large epoch length
+            avg_losses[k] = avg_losses[k].detach().cpu()
 
-        return loss, loss_items
+        return train_loss, avg_losses
 
     @torch.no_grad()
     def calc_metric(self, preds, labels, eps=1e-8):
@@ -87,9 +87,9 @@ class SpliceBaseModule(nn.Module):
             labels are the ground truth in the batch_feats
             return a dict of metric items
         """
-        metric_items = {}
+        avg_metrics = {}
         if 'cls' not in labels or 'psi' not in labels:
-            return metric_items
+            return avg_metrics
         
         # compute precision, recall, f1 for cls
         cls_pred = torch.movedim(F.softmax(preds['cls_logits'], dim=1), 1, -1)  # (B, [num_tissues], crop_size, num_classes)
@@ -104,18 +104,18 @@ class SpliceBaseModule(nn.Module):
         cls_recall = cls_tp / (cls_tp + cls_fn + eps)
         cls_f1 = 2 * cls_precision * cls_recall / (cls_precision + cls_recall + eps)
 
-        metric_items['cls_precision'] = cls_precision.mean()
-        metric_items['cls_recall'] = cls_recall.mean()
-        metric_items['cls_f1'] = cls_f1.mean()
+        avg_metrics['cls_precision'] = cls_precision.mean()
+        avg_metrics['cls_recall'] = cls_recall.mean()
+        avg_metrics['cls_f1'] = cls_f1.mean()
         
         # compute mse for psi
         psi_pred = torch.sigmoid(preds['psi_logits'])  # (B, crop_size)
-        metric_items['psi_mse'] = F.mse_loss(psi_pred, labels['psi'], reduction='mean')
+        avg_metrics['psi_mse'] = F.mse_loss(psi_pred, labels['psi'], reduction='mean')
 
-        for k in metric_items: # do not move to cpu here, let the caller do it
-            metric_items[k] = metric_items[k].detach().cpu()
+        for k in avg_metrics: # do not move to cpu here, let the caller do it
+            avg_metrics[k] = avg_metrics[k].detach().cpu()
 
-        return metric_items
+        return avg_metrics
 
     def preds_to_labels(self, preds):
         """ Convert the raw network outputs to discrete labels

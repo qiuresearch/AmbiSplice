@@ -371,20 +371,20 @@ class OmniRunModule(LightningModule):
         if self._train_steps == 0 and not self.is_child_process:
             utils.peekaboo_tensors(preds, prefix='Training Step Forward')
 
-        loss, loss_items = self.model.calc_loss(preds, batch_feats)
-        loss_items.update(self.model.calc_metric(preds, batch_feats))
+        train_loss, avg_losses = self.model.calc_loss(preds, batch_feats)
+        avg_losses.update(self.model.calc_metric(preds, batch_feats))
         if self._train_steps == 0 and not self.is_child_process:
-            utils.peekaboo_tensors(loss_items, prefix='Training Step Metrics')
+            utils.peekaboo_tensors(avg_losses, prefix='Training Step Metrics')
         
-        self.log("train_loss", loss, prog_bar=True)
-        self.train_epoch_metrics.append(loss_items)
+        self.log("train_loss", train_loss, prog_bar=True)
+        self.train_epoch_metrics.append(avg_losses)
         self._train_steps += 1
 
         if self._train_steps % 1000 == 0:
             torch.cuda.empty_cache()
             gc.collect()
 
-        return loss
+        return train_loss
     
     def on_train_epoch_end(self):
         epoch_time = (time.time() - self._epoch_start_time) / 60.0
@@ -417,16 +417,16 @@ class OmniRunModule(LightningModule):
         if self._validation_steps == 0 and not self.is_child_process:
             utils.peekaboo_tensors(preds, prefix='Validation Step Forward')
 
-        loss, loss_items = self.model.calc_loss(preds, batch_feats)
-        loss_items.update(self.model.calc_metric(preds, batch_feats))
+        train_loss, avg_losses = self.model.calc_loss(preds, batch_feats)
+        avg_losses.update(self.model.calc_metric(preds, batch_feats))
 
         if self._validation_steps == 0 and not self.is_child_process:
-            utils.peekaboo_tensors(loss_items, prefix='Validation Step Metrics')
+            utils.peekaboo_tensors(avg_losses, prefix='Validation Step Metrics')
 
-        self.log("val_loss", loss, prog_bar=True)
-        self.validation_epoch_metrics.append(loss_items)
+        self.log("val_loss", train_loss, prog_bar=True)
+        self.validation_epoch_metrics.append(avg_losses)
         self._validation_steps += 1
-        return loss
+        return train_loss
 
     def on_validation_epoch_start(self):
         self._epoch_start_time = time.time()
@@ -463,13 +463,13 @@ class OmniRunModule(LightningModule):
         if self._test_steps == 0 and not self.is_child_process:
             utils.peekaboo_tensors(preds, prefix='Test Step Output')
 
-        loss, loss_items = self.model.calc_loss(preds, batch_feats)
-        loss_items.update(self.model.calc_metric(preds, batch_feats))
+        train_loss, avg_losses = self.model.calc_loss(preds, batch_feats)
+        avg_losses.update(self.model.calc_metric(preds, batch_feats))
         if self._test_steps == 0 and not self.is_child_process:
-            utils.peekaboo_tensors(loss_items, prefix='Test Loss Items')
+            utils.peekaboo_tensors(avg_losses, prefix='Test Loss Items')
 
-        self.log("test/loss", loss, prog_bar=True)
-        self.test_epoch_metrics.append(loss_items)
+        self.log("test/loss", train_loss, prog_bar=True)
+        self.test_epoch_metrics.append(avg_losses)
 
         pred_labels = self.model.preds_to_labels(preds)
         self._test_steps += 1
@@ -517,12 +517,12 @@ class OmniRunModule(LightningModule):
         if self._predict_steps == 0:
             utils.peekaboo_tensors(preds, prefix='Predict Step Output')
 
-        loss, loss_items = self.model.calc_loss(preds, batch_feats)
-        loss_items.update(self.model.calc_metric(preds, batch_feats))
-        if loss_items:
-            self.predict_epoch_metrics.append(loss_items)
+        train_loss, avg_losses = self.model.calc_loss(preds, batch_feats)
+        avg_losses.update(self.model.calc_metric(preds, batch_feats))
+        if avg_losses:
+            self.predict_epoch_metrics.append(avg_losses)
             if self._predict_steps == 0:
-                utils.peekaboo_tensors(loss_items, prefix='Predict Step Metrics')
+                utils.peekaboo_tensors(avg_losses, prefix='Predict Step Metrics')
 
         self._predict_steps += 1
         return (batch_feats, preds)
