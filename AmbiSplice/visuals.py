@@ -38,9 +38,10 @@ def plot_train_feats(feats, tissue_idx=0, meta_dict={}):
         seq = seq.decode('utf-8')
 
     for p in np.where(cls_label > 0)[0]:
-        axes[1].text(p, cls_max * 1.05, str(seq[p]), fontsize=12, color=axlines[0].get_color(), ha='center', va='center')
+        axes[1].text(p, cls_max * 1.05, f'{seq[p]}', fontsize=12, color=axlines[0].get_color(), ha='center', va='center')
+        axes[1].text(p, cls_max * 1.16, f'{p}', fontsize=10, color=axlines[0].get_color(), ha='center', va='bottom', rotation=90)        
 
-    axes[1].set_ylim(0, cls_max * 1.15)
+    axes[1].set_ylim(0, cls_max * 1.35)
     axes[1].set_ylabel('Splice Site\nClassification')
 
     # panel 3: psi

@@ -18,7 +18,16 @@ from pytorch_lightning.utilities.rank_zero import rank_zero_only
 logging.basicConfig(level=logging.INFO)
 
 def is_child_process():
-    return torch.distributed.is_available() and torch.distributed.is_initialized() and torch.distributed.get_rank() > 0
+    # is_child = torch.distributed.is_available() and torch.distributed.is_initialized() and torch.distributed.get_rank() > 0
+    is_child = int(os.environ.get('NODE_RANK', 0)) + int(os.environ.get('LOCAL_RANK', 0)) > 0
+    # print(f"GLOBAL_RANK: {os.environ.get('RANK')}")
+    # print(f"NODE_RANK: {os.environ.get('NODE_RANK')}")
+    # print(f"LOCAL_RANK: {os.environ.get('LOCAL_RANK')}")
+    # print(f"MASTER_PORT: {os.environ.get('MASTER_PORT')}")
+    # print(f"MASTER_ADDR: {os.environ.get('MASTER_ADDR')}")
+    # print(f"WORLD_SIZE: {os.environ.get('WORLD_SIZE')}")
+    # print(f"MASTER_ADDRESS: {os.environ.get('MASTER_ADDRESS')}")    
+    return is_child
     
 
 def get_rank():

@@ -45,9 +45,9 @@ model:
 datamodule: # Datamodule + Dataloader + Sampler configs
   debug: ${debug}
   train_batch_size: 64
-  val_batch_size: 128
-  test_batch_size: 128
-  predict_batch_size: 128
+  val_batch_size: 96
+  test_batch_size: 96
+  predict_batch_size: 96
   train_shuffle: true
   val_shuffle: false
   test_shuffle: false

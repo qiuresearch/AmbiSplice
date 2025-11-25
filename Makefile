@@ -13,8 +13,13 @@ CONDA_ENV_NAME?=ambisplice
 
 gpus=0
 debug=false
+train_len=null
+val_len=null
+predict_len=200000
+
 sbatch=false
-predict_size=20000
+partition=small-gpu
+time=7-00:00:00
 
 help: ## Display this help message
 	@echo "Usage: make <target>"
@@ -23,10 +28,12 @@ help: ## Display this help message
 	@grep -E '^[0-9a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-42s\033[0m %s\n", $$1, $$2}'
 
 sbatch_redirect: ## Redirect the action to sbatch instead of interactive running
+	@if [ -n "$${SLURM_JOB_ID}" ] ; then exit 0 ; fi
+	@GOALOPT="gpus=$(gpus) train_len=$(train_len) val_len=$(val_len) predict_len=$(predict_len) debug=$(debug)"
 	@if [ "$(sbatch)" = "true" ] ; then \
-		sbatch_file=sbatch ; sbatch_cmds=() ; \
-		for goal in $(MAKECMDGOALS) ; do sbatch_file=$${sbatch_file}_$${goal} ; sbatch_cmds+=(make $${goal} \; ) ; done ; \
-		sbatch_brew.sh -p small-gpu -t 7-00:00:00 -o "$${sbatch_file}.sh" "$${sbatch_cmds[*]}" ; \
+		sbatch_file=sbatch ; sbatch_cmds=(echo Starting...) ; \
+		for goal in $(MAKECMDGOALS) ; do sbatch_file=$${sbatch_file}_$${goal} ; sbatch_cmds+=(\; make $${goal} $${GOALOPT}) ; done ; \
+		sbatch_brew.sh -p $(partition) -t $(time) -o "$${sbatch_file}.sh" "$${sbatch_cmds[*]}" ; \
 		echo "Submitting via sbatch ..." ; \
 		sbatch "$${sbatch_file}.sh" ; \
 		exit 1 ; \
@@ -40,6 +47,7 @@ install: ## Install python dependencies under conda environment
 	pip install torch==2.6.0 torchvision==0.21.0 torchaudio==2.6.0 --index-url https://download.pytorch.org/whl/cu126
 	pip install lightning
 	conda install -c conda-forge pandas numpy hydra-core omegaconf wandb gputil matplotlib beartype h5py pytables -y
+	connda install mappy -c bioconda -y
 
 download_pangolin_genomes: ## Download Pangolin genomes
 	# Download human and mouse genomes from Gencode (or Ensembl)

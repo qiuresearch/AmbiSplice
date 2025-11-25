@@ -220,9 +220,12 @@ class GeneCropsDataset(Dataset):
             'cls': crop_feat['cls'].astype(np.int64),
             'psi': crop_feat['psi'], # usage
             'chrom': crop_feat['chrom'].decode(),
+            'gene_id': crop_feat['gene_id'].decode(),
+            'gene_start': crop_feat['gene_start'][0],
+            'gene_end': crop_feat['gene_end'][0],
+            'strand': crop_feat['strand'].decode(),
             'start': crop_feat['crop_start'][0],
             'end': crop_feat['crop_end'][0],
-            'strand': crop_feat['strand'].decode(),
         }
 
         if self.num_classes:
