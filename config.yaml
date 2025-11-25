@@ -29,10 +29,10 @@ dataset:
   test_path: null
   predict_path: null
   split_seed: 111
-  train_size: null
-  val_size: null
-  test_size: null
-  predict_size: null
+  train_epoch_length: null
+  val_epoch_length: null
+  test_epoch_length: null
+  predict_epoch_length: null
   enable_cache: false
 model:
   debug: ${debug}
@@ -96,7 +96,7 @@ litrun:
     log_momentum: false
   checkpoints:
     dirpath: checkpoints # wandb name will be appended automatically
-    filename: 'valoss-{val_loss:.4f}_epoch-{epoch:03d}_step-{step:06d}'
+    filename: 'valoss-{val_loss:.6f}_epoch-{epoch:03d}_step-{step:06d}'
     auto_insert_metric_name: false
     save_weights_only: false
     save_last: true

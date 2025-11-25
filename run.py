@@ -124,20 +124,20 @@ def get_torch_datasets(dataset_cfg: DictConfig):
         print(f"Validation set size: {len(val_df)}")
         print(f"Test set size: {len(test_df)}")
 
-        train_set = datasets.GeneSitesDataset(train_df, epoch_size=dataset_cfg.train_size, summarize=True, **dataset_cfg)
-        val_set = datasets.GeneSitesDataset(val_df, epoch_size=dataset_cfg.val_size, summarize=False, **dataset_cfg)
-        # test_set = datasets.GeneSitesDataset(test_df, epoch_size=dataset_cfg.test_size, summarize=False, **dataset_cfg)
-        predict_set = datasets.GeneSitesDataset(test_df, epoch_size=dataset_cfg.predict_size, summarize=False, **dataset_cfg)
+        train_set = datasets.GeneSitesDataset(train_df, epoch_length=dataset_cfg.train_epoch_length, summarize=True, **dataset_cfg)
+        val_set = datasets.GeneSitesDataset(val_df, epoch_length=dataset_cfg.val_epoch_length, summarize=False, **dataset_cfg)
+        # test_set = datasets.GeneSitesDataset(test_df, epoch_length=dataset_cfg.test_epoch_length, summarize=False, **dataset_cfg)
+        predict_set = datasets.GeneSitesDataset(test_df, epoch_length=dataset_cfg.predict_epoch_length, summarize=False, **dataset_cfg)
     elif dataset_cfg.type.upper() == 'GeneCrops'.upper():
         train_indices, val_indices = None, None
 
         if dataset_cfg.train_path:
-            train_set = datasets.GeneCropsDataset(dataset_cfg.train_path, file_path=dataset_cfg.train_path, epoch_size=dataset_cfg.train_size, summarize=True, **dataset_cfg)
+            train_set = datasets.GeneCropsDataset(dataset_cfg.train_path, file_path=dataset_cfg.train_path, epoch_length=dataset_cfg.train_epoch_length, summarize=True, **dataset_cfg)
         elif dataset_cfg.stage.lower().startswith('train'):
             raise ValueError("Training stage requires train_path to be specified in dataset config!")
 
         if dataset_cfg.val_path:
-            val_set = datasets.GeneCropsDataset(dataset_cfg.val_path, file_path=None, epoch_size=dataset_cfg.val_size, summarize=False, **dataset_cfg)
+            val_set = datasets.GeneCropsDataset(dataset_cfg.val_path, file_path=None, epoch_length=dataset_cfg.val_epoch_length, summarize=False, **dataset_cfg)
         elif dataset_cfg.stage.lower().startswith('train') and train_set is not None:
             # Create validation set from training set
             # The easiest is to use torch.utils.data.random_split. 
@@ -156,7 +156,7 @@ def get_torch_datasets(dataset_cfg: DictConfig):
             ilogger.warning("No validation dataset used for training!!!")
             
         if dataset_cfg.predict_path:
-            predict_set = datasets.GeneCropsDataset(dataset_cfg.predict_path, file_path=None, epoch_size=dataset_cfg.predict_size, summarize=False, **dataset_cfg)
+            predict_set = datasets.GeneCropsDataset(dataset_cfg.predict_path, file_path=None, epoch_length=dataset_cfg.predict_epoch_length, summarize=False, **dataset_cfg)
         elif dataset_cfg.stage.lower().startswith(('eval', 'predict')):
             raise ValueError(f"{dataset_cfg.stage} stage requires predict_path to be specified in dataset config!")
 
@@ -169,12 +169,12 @@ def get_torch_datasets(dataset_cfg: DictConfig):
             raise ValueError(f"Unknown dataset type: {dataset_cfg.type}")
 
         if dataset_cfg.train_path:
-            train_set = dataset_class(file_path=dataset_cfg.train_path, epoch_size=dataset_cfg.train_size, summarize=True, **dataset_cfg)
+            train_set = dataset_class(file_path=dataset_cfg.train_path, epoch_length=dataset_cfg.train_epoch_length, summarize=True, **dataset_cfg)
         elif dataset_cfg.stage.lower().startswith('train'):
             raise ValueError("Training stage requires train_path to be specified in dataset config!")
 
         if dataset_cfg.val_path:
-            val_set = dataset_class(file_path=dataset_cfg.val_path, epoch_size=dataset_cfg.val_size, summarize=False, **dataset_cfg)
+            val_set = dataset_class(file_path=dataset_cfg.val_path, epoch_length=dataset_cfg.val_epoch_length, summarize=False, **dataset_cfg)
         elif dataset_cfg.stage.lower().startswith('train') and train_set is not None:
             train_split_size = int(0.9 * len(train_set))
             train_set, val_set = torch.utils.data.random_split(train_set, [train_split_size, len(train_set) - train_split_size],
@@ -184,7 +184,7 @@ def get_torch_datasets(dataset_cfg: DictConfig):
             ilogger.warning("No validation dataset used for training!!!")
 
         if dataset_cfg.predict_path:
-            predict_set = dataset_class(file_path=dataset_cfg.predict_path, epoch_size=dataset_cfg.predict_size, summarize=False, **dataset_cfg)
+            predict_set = dataset_class(file_path=dataset_cfg.predict_path, epoch_length=dataset_cfg.predict_epoch_length, summarize=False, **dataset_cfg)
         elif dataset_cfg.stage.lower().startswith(('eval', 'predict')):
             raise ValueError(f"{dataset_cfg.stage} stage requires predict_path to be specified in dataset config!")
 

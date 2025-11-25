@@ -47,7 +47,7 @@ install: ## Install python dependencies under conda environment
 	pip install torch==2.6.0 torchvision==0.21.0 torchaudio==2.6.0 --index-url https://download.pytorch.org/whl/cu126
 	pip install lightning
 	conda install -c conda-forge pandas numpy hydra-core omegaconf wandb gputil matplotlib beartype h5py pytables -y
-	connda install mappy -c bioconda -y
+	conda install mappy -c bioconda -y
 
 download_pangolin_genomes: ## Download Pangolin genomes
 	# Download human and mouse genomes from Gencode (or Ensembl)
@@ -70,9 +70,11 @@ download_pangolin_genomes: ## Download Pangolin genomes
 	faidx Macaca_mulatta.Mmul_10.dna.toplevel.fa
 	faidx Rattus_norvegicus.Rnor_6.0.dna.toplevel.fa
 
-eval_pangolinomni3_pangolinsolo123: sbatch ## Evaluate PangolinOmni3 model trained on PangolinSolo123 dataset
+eval_pangolinomni3_pangolinsolo123: ## Evaluate PangolinOmni3 model trained on PangolinSolo123 dataset
 	ckpt_dir=checkpoints/pangolinomni3.pangolinsolo123_2025-11-11_00-04-02_97d417l3
-	ckpt_path="$${ckpt_dir}/best.ckpt"
+	ckpt_dir=checkpoints/pangolinomni3.pangolinsolo123_2025-11-19_20-34-04_pwa6rdke
+	ckpt_files=($$(ls $${ckpt_dir}/valoss*.ckpt))
+	ckpt_path=$${ckpt_files[0]}
 	tissues=(liver)
 	tissues=(heart liver brain testis)
 	tissues=(heart liver brain testis "heart,liver,brain,testis")	
@@ -86,7 +88,7 @@ eval_pangolinomni3_pangolinsolo123: sbatch ## Evaluate PangolinOmni3 model train
 			litrun.resume_from_ckpt=$${ckpt_path} \
 			dataset.type=pangolinsolo \
 			dataset.train_path=null \
-			dataset.predict_size=$(predict_size) \
+			dataset.predict_epoch_length=$(predict_len) \
 			dataset.predict_path=data/pangolin/dataset_test_1.h5 \
 			+dataset.tissue_types=[$${tissues[i]}] \
 			+dataset.tissue_embedding_path="data/tissue_avg_pca_embeddings.csv" \
@@ -110,7 +112,7 @@ eval_pangolinomni2_pangolinsolo123: ## Evaluate PangolinOmni2 model trained on P
 			litrun.resume_from_ckpt="$${ckpt_path}" \
 			dataset.type=pangolinsolo \
 			dataset.train_path=null \
-			dataset.predict_size=$(predict_size) \
+			dataset.predict_epoch_length=$(predict_len) \
 			dataset.predict_path=data/pangolin/dataset_test_1.h5 \
 			+dataset.tissue_types=[$${tissues[i]}] \
 			+dataset.tissue_embedding_path="data/tissue_avg_pca_embeddings.csv" \
@@ -133,7 +135,7 @@ eval_pangolinomni_pangolinsolo123: ## Evaluate PangolinOmni model trained on Pan
 			litrun.resume_from_ckpt=$${ckpt_dir}/best.ckpt \
 			dataset.type=pangolinsolo \
 			dataset.train_path=null \
-			dataset.predict_size=$(predict_size) \
+			dataset.predict_epoch_length=$(predict_len) \
 			dataset.predict_path=data/pangolin/dataset_test_1.h5 \
 			+dataset.tissue_types=[$${tissues[i]}] \
 			+dataset.tissue_embedding_path="data/tissue_avg_pca_embeddings.csv" \
@@ -156,7 +158,7 @@ eval_pangolinsolo_pangolinsolo4: ## Evaluate PangolinSolo model trained on Pango
 			litrun.resume_from_ckpt=$${ckpt_path} \
 			dataset.type=pangolinsolo \
 			dataset.train_path=null \
-			dataset.predict_size=$(predict_size) \
+			dataset.predict_epoch_length=$(predict_len) \
 			dataset.predict_path=data/pangolin/dataset_test_1.h5 \
 			+dataset.tissue_types=[$${tissues[i]}] \
 			debug=$(debug)
@@ -178,7 +180,7 @@ eval_pangolinsolo_pangolinsolo3: ## Evaluate PangolinSolo model trained on Pango
 			litrun.resume_from_ckpt=$${ckpt_path} \
 			dataset.type=pangolinsolo \
 			dataset.train_path=null \
-			dataset.predict_size=$(predict_size) \
+			dataset.predict_epoch_length=$(predict_len) \
 			dataset.predict_path=data/pangolin/dataset_test_1.h5 \
 			+dataset.tissue_types=[$${tissues[i]}] \
 			debug=$(debug)
@@ -200,7 +202,7 @@ eval_pangolinsolo_pangolinsolo2: ## Evaluate PangolinSolo model trained on Pango
 			litrun.resume_from_ckpt=$${ckpt_path} \
 			dataset.type=pangolinsolo \
 			dataset.train_path=null \
-			dataset.predict_size=$(predict_size) \
+			dataset.predict_epoch_length=$(predict_len) \
 			dataset.predict_path=data/pangolin/dataset_test_1.h5 \
 			+dataset.tissue_types=[$${tissues[i]}] \
 			debug=$(debug)
@@ -223,7 +225,7 @@ eval_pangolinsolo_pangolinsolo1: ## Evaluate PangolinSolo model trained on Pango
 			litrun.resume_from_ckpt=$${ckpt_path} \
 			dataset.type=pangolinsolo \
 			dataset.train_path=null \
-			dataset.predict_size=$(predict_size) \
+			dataset.predict_epoch_length=$(predict_len) \
 			dataset.predict_path=data/pangolin/dataset_test_1.h5 \
 			+dataset.tissue_types=[$${tissues[i]}] \
 			debug=$(debug)
@@ -248,7 +250,7 @@ eval_pangolinsolo_pangolinsolo1: ## Evaluate PangolinSolo model trained on Pango
 # 			litrun.resume_from_ckpt=$${ckpt_names[j]} \
 # 			dataset.type=pangolinsolo \
 # 			dataset.train_path=null \
-# 			dataset.predict_size=$(predict_size) \
+# 			dataset.predict_epoch_length=$(predict_len) \
 # 			dataset.predict_path=data/pangolin/dataset_test_1.h5 \
 # 			+dataset.tissue_types=[$${tissues[i]}] \
 # 			debug=$(debug)
@@ -271,7 +273,7 @@ eval_pangolinorig_ensemble_pangolin: ## Evaluate Pangolin original ensemble aver
 		ensemble.model.state_dict_path=[$${model_dir}/final.1.0.3,$${model_dir}/final.2.0.3,$${model_dir}/final.3.0.3,$${model_dir}/final.4.0.3,$${model_dir}/final.5.0.3] \
 	    dataset.type=pangolin \
 		dataset.predict_path=data/pangolin/dataset_test_1.h5 \
-		dataset.predict_size=$(predict_size) \
+		dataset.predict_epoch_length=$(predict_len) \
 		+dataset.tissue_types=[heart,liver,brain,testis] \
 		debug=$(debug)
 
@@ -286,7 +288,7 @@ eval_pangolin_pangolin: ## Evaluate Pangolin model trained on Pangolin dataset (
 		litrun.resume_from_ckpt=$${ckpt_dir}/best.ckpt \
 		dataset.type=pangolin \
 		dataset.train_path=null \
-		dataset.predict_size=$(predict_size) \
+		dataset.predict_epoch_length=$(predict_len) \
 		dataset.predict_path=data/pangolin/dataset_test_1.h5 \
 		+dataset.tissue_types=[heart,liver,brain,testis] \
 		debug=$(debug)
@@ -310,7 +312,7 @@ eval_pangolinorig_pangolin: ## Evaluate Pangolin original model
 			ensemble.enable=false \
 			dataset.type=pangolin \
 			dataset.predict_path=data/pangolin/dataset_test_1.h5 \
-			dataset.predict_size=$(predict_size) \
+			dataset.predict_epoch_length=$(predict_len) \
 			+dataset.tissue_types=[heart,liver,brain,testis] \
 			debug=$(debug)
 	done

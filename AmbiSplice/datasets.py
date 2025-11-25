@@ -44,14 +44,14 @@ class PangolinSoloDataset(Dataset):
     Returns sample_feat containing only one tissue type per call, which is randomly picked 
     based on tissue_types list.
     """
-    def __init__(self, file_path, tissue_types=['heart'], tissue_embedding_path=None, epoch_size=None, **kwargs):
+    def __init__(self, file_path, tissue_types=['heart'], tissue_embedding_path=None, epoch_length=None, **kwargs):
         super(PangolinSoloDataset, self).__init__()
         self.file_path = file_path
         self.data = h5py.File(file_path, 'r', libver='latest')
         assert len(self.data) % 3 == 0
-        self.epoch_size = len(self.data) // 3 * len(tissue_types)
-        if epoch_size is not None:
-            self.epoch_size = min(epoch_size, self.epoch_size)
+        self.epoch_length = len(self.data) // 3 * len(tissue_types)
+        if epoch_length:
+            self.epoch_length = min(epoch_length, self.epoch_length)
         
         self.tissue_cols = get_pangolin_tissue_cols(tissue_types)
         self.tissue_types = [t.lower() for t in tissue_types]
@@ -111,7 +111,7 @@ class PangolinSoloDataset(Dataset):
         return sample_feat
 
     def __len__(self):
-        return self.epoch_size
+        return self.epoch_length
     
     def __del__(self):
         try:
@@ -122,14 +122,14 @@ class PangolinSoloDataset(Dataset):
 
 class PangolinDataset(Dataset):
     """ Adapted from Pangolin github repo """
-    def __init__(self, file_path, tissue_types=['heart', 'liver', 'brain', 'testis'], epoch_size=None, **kwargs):
+    def __init__(self, file_path, tissue_types=['heart', 'liver', 'brain', 'testis'], epoch_length=None, **kwargs):
         super(PangolinDataset, self).__init__()
         self.file_path = file_path
         self.data = h5py.File(file_path, 'r', libver='latest')
         assert len(self.data) % 3 == 0
-        self.epoch_size = len(self.data) // 3
-        if epoch_size is not None:
-            self.epoch_size = min(epoch_size, self.epoch_size)
+        self.epoch_length = len(self.data) // 3
+        if epoch_length:
+            self.epoch_length = min(epoch_length, self.epoch_length)
 
         self.tissue_cols = get_pangolin_tissue_cols(tissue_types)
         self.iterations = 0
@@ -144,7 +144,7 @@ class PangolinDataset(Dataset):
         Y = self.data['Y' + str(idx)][:].T # transpose to (12, L)
         Z = self.data['Z' + str(idx)][:] # (4,): [chrom, start, end, strand]
 
-        # each tissue: unspliced, spliced, usage
+        # for each tissue: unspliced, spliced, usage
         cls_list, psi_list = [], []
         for tissue_col in self.tissue_cols:
             cls_list.append(np.argmax(Y[tissue_col:tissue_col+2, :], axis=0)) # 0: unspliced, 1: spliced
@@ -164,7 +164,7 @@ class PangolinDataset(Dataset):
         return sample_feat
 
     def __len__(self):
-        return self.epoch_size
+        return self.epoch_length
     
     def __del__(self):
         try:
@@ -247,7 +247,7 @@ class GeneCropsDataset(Dataset):
 
 
 class GeneSitesDataset(Dataset):
-    def __init__(self, meta_df, epoch_size=None, summarize=False,
+    def __init__(self, meta_df, epoch_length=None, summarize=False,
                  data_dir='./', enable_cache=False, cache_dir='/tmp',
                  weighted_sampling=False, dynamic_weights=True, min_quality=None,
                  stratified_sampling=None, sampling_method=None, 
@@ -283,7 +283,7 @@ class GeneSitesDataset(Dataset):
             raise ValueError("meta_df must be a pandas DataFrame.")
         
         self.meta_df = meta_df.reset_index(drop=True)
-        self.epoch_size = len(meta_df) if epoch_size is None else epoch_size
+        self.epoch_length = len(meta_df) if epoch_length is None else epoch_length
         self.random_seed = random_seed
         self.iterations = 0
 
@@ -338,15 +338,15 @@ class GeneSitesDataset(Dataset):
                                     self.sampling_method or 
                                     self.weighted_sampling)
 
-        if not self.customized_sampling and self.epoch_size > len(meta_df):
-            ilogger.warning(f"epoch_size {self.epoch_size} is greater than sample_size {len(meta_df)}, adjusting epoch_size.")
-            self.epoch_size = len(meta_df)
+        if not self.customized_sampling and self.epoch_length > len(meta_df):
+            ilogger.warning(f"epoch_size {self.epoch_length} is greater than sample_size {len(meta_df)}, adjusting epoch_size.")
+            self.epoch_length = len(meta_df)
 
         if summarize and not self.is_child_process:
             print(f"SpliceDataset summary:")
             print(f"               training: {self.training}")
             print(f"           len(meta_df): {len(self.meta_df)}")
-            print(f"             epoch_size: {self.epoch_size}")
+            print(f"             epoch_size: {self.epoch_length}")
             print(f"               data_dir: {self.data_dir}")
             print(f"              cache_dir: {self.cache_dir if self.enable_cache else 'None'}")
             print(f"            min_quality: {self.min_quality}")
@@ -358,12 +358,12 @@ class GeneSitesDataset(Dataset):
             # print(f"    sampling_method: {self.sampling_method if self.sampling_method else 'None'}")
 
     def __len__(self):
-        return self.epoch_size
+        return self.epoch_length
 
     def __getitem__(self, idx):
 
-        if idx < 0 or idx >= self.epoch_size:
-            raise IndexError(f"Index:{idx} out of bounds for SpliceDataset (epoch_size: {self.epoch_size}).")
+        if idx < 0 or idx >= self.epoch_length:
+            raise IndexError(f"Index:{idx} out of bounds for SpliceDataset (epoch_size: {self.epoch_length}).")
 
         sample_feat = None
         while sample_feat is None:
@@ -453,7 +453,7 @@ class GeneSitesDataset(Dataset):
         if self.training:
             if self.dynamic_weights:
                 # Todo: update sampling weights based on sample quality
-                if self.weighted_sampling and self.iterations % self.epoch_size == 0:
+                if self.weighted_sampling and self.iterations % self.epoch_length == 0:
                     self.get_normalized_sampling_weights()
                 
         return sample_feat
