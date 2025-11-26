@@ -674,6 +674,7 @@ class OmniRunModule(LightningModule):
             ilogger.info(f"Batch metrics saved to {metrics_path}")
 
         # concat all batches to two dicts of tensors (feats, preds)
+        ilogger.info('Concatenate input and prediction batches...')
         eval_feats, eval_preds = utils.concat_dicts_outputs(eval_outputs)
         del eval_outputs
 

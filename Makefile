@@ -15,6 +15,7 @@ gpus=0
 debug=false
 train_len=null
 val_len=null
+test_len=null
 predict_len=200000
 
 sbatch=false
@@ -29,7 +30,7 @@ help: ## Display this help message
 
 sbatch_redirect: ## Redirect the action to sbatch instead of interactive running
 	@if [ -n "$${SLURM_JOB_ID}" ] ; then exit 0 ; fi
-	@GOALOPT="gpus=$(gpus) train_len=$(train_len) val_len=$(val_len) predict_len=$(predict_len) debug=$(debug)"
+	@GOALOPT="gpus=$(gpus) train_len=$(train_len) val_len=$(val_len) test_len=$(test_len) predict_len=$(predict_len) debug=$(debug)"
 	@if [ "$(sbatch)" = "true" ] ; then \
 		sbatch_file=sbatch ; sbatch_cmds=(echo Starting...) ; \
 		for goal in $(MAKECMDGOALS) ; do sbatch_file=$${sbatch_file}_$${goal} ; sbatch_cmds+=(\; make $${goal} $${GOALOPT}) ; done ; \
@@ -46,6 +47,7 @@ install: ## Install python dependencies under conda environment
 	# Install PyTorch with CUDA 12.6 support
 	pip install torch==2.6.0 torchvision==0.21.0 torchaudio==2.6.0 --index-url https://download.pytorch.org/whl/cu126
 	pip install lightning
+	pip install lightning[extra]
 	conda install -c conda-forge pandas numpy hydra-core omegaconf wandb gputil matplotlib beartype h5py pytables -y
 	conda install mappy -c bioconda -y
 
@@ -439,6 +441,11 @@ train_pangolinomni3_pangolinsolo123: sbatch_redirect ## Train PangolinOmni3 mode
 		model.state_dict_path=null \
 		dataset.type=pangolinsolo \
 		dataset.train_path=data/pangolin/dataset_train_all.h5 \
+		dataset.train_epoch_length=$(train_len) \
+		dataset.val_epoch_length=$(val_len) \
+		dataset.test_epoch_length=$(test_len) \
+		dataset.predict_path=null \
+		dataset.predict_epoch_length=$(predict_len) \
 		+dataset.tissue_types=[heart,liver,brain] \
 		+dataset.tissue_embedding_path="data/tissue_avg_pca_embeddings.csv" \
 		datamodule.train_batch_size=96 \

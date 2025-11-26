@@ -48,10 +48,12 @@ class PangolinSoloDataset(Dataset):
         super(PangolinSoloDataset, self).__init__()
         self.file_path = file_path
         self.data = h5py.File(file_path, 'r', libver='latest')
+        self.data_length = len(self.data) // 3
         assert len(self.data) % 3 == 0
-        self.epoch_length = len(self.data) // 3 * len(tissue_types)
         if epoch_length:
-            self.epoch_length = min(epoch_length, self.epoch_length)
+            self.epoch_length = epoch_length
+        else:
+            self.epoch_length = self.data_length * len(tissue_types)
         
         self.tissue_cols = get_pangolin_tissue_cols(tissue_types)
         self.tissue_types = [t.lower() for t in tissue_types]
@@ -75,17 +77,21 @@ class PangolinSoloDataset(Dataset):
             self.data.close()
             self.data = h5py.File(self.file_path, 'r', libver='latest')
 
-        if len(self.tissue_cols) > 1:
+        if len(self.tissue_cols) > 1: # multiple tissues, adjust idx accordingly
             idx = idx // len(self.tissue_cols)
             itissue = idx % len(self.tissue_cols)
         else:
             itissue = 0
+    
+        if idx >= self.data_length:
+            ilogger.warning(f'idx: {idx} exceeds data length: {self.data_length}!')
+            idx = idx % self.data_length
 
         tissue_col = self.tissue_cols[itissue]
 
-        X = self.data['X' + str(idx)][:].T # transpose to (4, L)
-        Y = self.data['Y' + str(idx)][:].T # transpose to (12, L)
-        Z = self.data['Z' + str(idx)][:] # (4,): [chrom, start, end, strand]
+        X = self.data[f'X{idx}'][:].T # transpose to (4, L)
+        Y = self.data[f'Y{idx}'][:].T # transpose to (12, L)
+        Z = self.data[f'Z{idx}'][:] # (4,): [chrom, start, end, strand]
 
         # each tissue: unspliced, spliced, usage
         sample_feat = {
@@ -126,10 +132,13 @@ class PangolinDataset(Dataset):
         super(PangolinDataset, self).__init__()
         self.file_path = file_path
         self.data = h5py.File(file_path, 'r', libver='latest')
+        self.data_length = len(self.data) // 3
         assert len(self.data) % 3 == 0
-        self.epoch_length = len(self.data) // 3
+
         if epoch_length:
-            self.epoch_length = min(epoch_length, self.epoch_length)
+            self.epoch_length = epoch_length
+        else:
+            self.epoch_length = self.data_length
 
         self.tissue_cols = get_pangolin_tissue_cols(tissue_types)
         self.iterations = 0
@@ -140,9 +149,13 @@ class PangolinDataset(Dataset):
             self.data.close()
             self.data = h5py.File(self.file_path, 'r', libver='latest')
 
-        X = self.data['X' + str(idx)][:].T # transpose to (4, L)
-        Y = self.data['Y' + str(idx)][:].T # transpose to (12, L)
-        Z = self.data['Z' + str(idx)][:] # (4,): [chrom, start, end, strand]
+        if idx >= self.data_length:
+            ilogger.warning(f'idx: {idx} exceeds data length: {self.data_length}!')
+            idx = idx % self.data_length
+
+        X = self.data[f'X{idx}'][:].T # transpose to (4, L)
+        Y = self.data[f'Y{idx}'][:].T # transpose to (12, L)
+        Z = self.data[f'Z{idx}'][:] # (4,): [chrom, start, end, strand]
 
         # for each tissue: unspliced, spliced, usage
         cls_list, psi_list = [], []

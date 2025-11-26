@@ -71,7 +71,7 @@ def get_torch_model(model_cfg: DictConfig):
         else:
             raise ValueError(f"Unknown model type: {model_cfg.type}")
 
-    ilogger.info(f"Initialized model {model_cfg.type} with config:\n{OmegaConf.to_yaml(model_cfg)}")
+    ilogger.info(f"Initialized model {model_cfg.type} with config") #:\n{OmegaConf.to_yaml(model_cfg)}")
 
     if model_cfg.state_dict_path is not None:
         state_dict_path = os.path.abspath(os.path.expanduser(model_cfg.state_dict_path))
@@ -87,7 +87,9 @@ def get_torch_datasets(dataset_cfg: DictConfig):
     """ Prepare training, validation, and prediction datasets."""
 
     train_set, val_set, test_set, predict_set = None, None, None, None
-    assert dataset_cfg.test_path is None, "test_path is not used in this script, please use predict_path instead!"
+    training = dataset_cfg.stage.lower().startswith('train')
+    testing = dataset_cfg.stage.lower().startswith(('test', 'eval'))
+    predicting = dataset_cfg.stage.lower().startswith('predict')
 
     if dataset_cfg.type.upper() == 'GeneSites'.upper():
         meta_df_path = dataset_cfg.train_path
@@ -131,14 +133,14 @@ def get_torch_datasets(dataset_cfg: DictConfig):
     elif dataset_cfg.type.upper() == 'GeneCrops'.upper():
         train_indices, val_indices = None, None
 
-        if dataset_cfg.train_path:
+        if training and dataset_cfg.train_path:
             train_set = datasets.GeneCropsDataset(dataset_cfg.train_path, file_path=dataset_cfg.train_path, epoch_length=dataset_cfg.train_epoch_length, summarize=True, **dataset_cfg)
-        elif dataset_cfg.stage.lower().startswith('train'):
+        elif training:
             raise ValueError("Training stage requires train_path to be specified in dataset config!")
 
-        if dataset_cfg.val_path:
+        if training and dataset_cfg.val_path:
             val_set = datasets.GeneCropsDataset(dataset_cfg.val_path, file_path=None, epoch_length=dataset_cfg.val_epoch_length, summarize=False, **dataset_cfg)
-        elif dataset_cfg.stage.lower().startswith('train') and train_set is not None:
+        elif training and train_set is not None:
             # Create validation set from training set
             # The easiest is to use torch.utils.data.random_split. 
             # Here we can think about doing stratified splitting, etc. later.
@@ -152,12 +154,12 @@ def get_torch_datasets(dataset_cfg: DictConfig):
 
             val_set = torch.utils.data.Subset(train_set, val_indices)
             train_set = torch.utils.data.Subset(train_set, train_indices)
-        elif dataset_cfg.stage.lower().startswith('train'):
+        elif training:
             ilogger.warning("No validation dataset used for training!!!")
             
-        if dataset_cfg.predict_path:
+        if (testing or predicting) and dataset_cfg.predict_path:
             predict_set = datasets.GeneCropsDataset(dataset_cfg.predict_path, file_path=None, epoch_length=dataset_cfg.predict_epoch_length, summarize=False, **dataset_cfg)
-        elif dataset_cfg.stage.lower().startswith(('eval', 'predict')):
+        elif (testing or predicting):
             raise ValueError(f"{dataset_cfg.stage} stage requires predict_path to be specified in dataset config!")
 
     elif dataset_cfg.type.upper().startswith('PANGOLIN'):
@@ -168,26 +170,30 @@ def get_torch_datasets(dataset_cfg: DictConfig):
         else:
             raise ValueError(f"Unknown dataset type: {dataset_cfg.type}")
 
-        if dataset_cfg.train_path:
+        if training and dataset_cfg.train_path:
             train_set = dataset_class(file_path=dataset_cfg.train_path, epoch_length=dataset_cfg.train_epoch_length, summarize=True, **dataset_cfg)
-        elif dataset_cfg.stage.lower().startswith('train'):
+        elif training:
             raise ValueError("Training stage requires train_path to be specified in dataset config!")
 
-        if dataset_cfg.val_path:
+        if training and dataset_cfg.val_path:
             val_set = dataset_class(file_path=dataset_cfg.val_path, epoch_length=dataset_cfg.val_epoch_length, summarize=False, **dataset_cfg)
-        elif dataset_cfg.stage.lower().startswith('train') and train_set is not None:
+        elif training and train_set is not None:
             train_split_size = int(0.9 * len(train_set))
             train_set, val_set = torch.utils.data.random_split(train_set, [train_split_size, len(train_set) - train_split_size],
                         generator=torch.Generator().manual_seed(dataset_cfg.split_seed if 'split_seed' in dataset_cfg else 42))
             ilogger.info(f"Split training set into train ({len(train_set)}) and val ({len(val_set)}) subsets.")
-        elif dataset_cfg.stage.lower().startswith('train'):
+        elif training:
             ilogger.warning("No validation dataset used for training!!!")
 
-        if dataset_cfg.predict_path:
-            predict_set = dataset_class(file_path=dataset_cfg.predict_path, epoch_length=dataset_cfg.predict_epoch_length, summarize=False, **dataset_cfg)
-        elif dataset_cfg.stage.lower().startswith(('eval', 'predict')):
-            raise ValueError(f"{dataset_cfg.stage} stage requires predict_path to be specified in dataset config!")
+        if training and dataset_cfg.test_path: # test is only used in training for validation after training
+            test_set = dataset_class(file_path=dataset_cfg.test_path, epoch_length=dataset_cfg.test_epoch_length, summarize=False, **dataset_cfg)
+        elif (testing or predicting) and dataset_cfg.test_path: 
+            raise ValueError(f"{dataset_cfg.stage} stage uses predict_path instead of test_path!")
 
+        if (testing or predicting) and dataset_cfg.predict_path:
+            predict_set = dataset_class(file_path=dataset_cfg.predict_path, epoch_length=dataset_cfg.predict_epoch_length, summarize=False, **dataset_cfg)
+        elif (testing or predicting) and not dataset_cfg.predict_path:
+            raise ValueError(f"{dataset_cfg.stage} stage requires predict_path to be specified in dataset config!")
     else:
         raise ValueError(f"Unknown dataset type: {dataset_cfg.type}")
 
