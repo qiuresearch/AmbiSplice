@@ -72,7 +72,7 @@ download_pangolin_genomes: ## Download Pangolin genomes
 	faidx Macaca_mulatta.Mmul_10.dna.toplevel.fa
 	faidx Rattus_norvegicus.Rnor_6.0.dna.toplevel.fa
 
-eval_pangolinomni3_pangolinsolo123: ## Evaluate PangolinOmni3 model trained on PangolinSolo123 dataset
+test_pangolinomni3_pangolinsolo123: ## Evaluate PangolinOmni3 model trained on PangolinSolo123 dataset
 	ckpt_dir=checkpoints/pangolinomni3.pangolinsolo123_2025-11-11_00-04-02_97d417l3
 	ckpt_dir=checkpoints/pangolinomni3.pangolinsolo123_2025-11-19_20-34-04_pwa6rdke
 	ckpt_files=($$(ls $${ckpt_dir}/valoss*.ckpt))
@@ -98,7 +98,7 @@ eval_pangolinomni3_pangolinsolo123: ## Evaluate PangolinOmni3 model trained on P
 		wait
 	done
 
-eval_pangolinomni2_pangolinsolo123: ## Evaluate PangolinOmni2 model trained on PangolinSolo123 dataset
+test_pangolinomni2_pangolinsolo123: ## Evaluate PangolinOmni2 model trained on PangolinSolo123 dataset
 	ckpt_dir=checkpoints/pangolinomni2.pangolinsolo123_2025-10-27_07-27-47_933otwx4
 	ckpt_path="$${ckpt_dir}/best.ckpt"
 	tissues=(liver)
@@ -122,7 +122,7 @@ eval_pangolinomni2_pangolinsolo123: ## Evaluate PangolinOmni2 model trained on P
 		wait
 	done
 
-eval_pangolinomni_pangolinsolo123: ## Evaluate PangolinOmni model trained on PangolinSolo123 dataset
+test_pangolinomni_pangolinsolo123: ## Evaluate PangolinOmni model trained on PangolinSolo123 dataset
 	ckpt_dir=checkpoints/pangolinomni.pangolinsolo123_2025-10-21_23-25-37_bsi1y0zt
 	tissues=(liver)
 	tissues=("heart,liver,brain,testis")	
@@ -145,7 +145,7 @@ eval_pangolinomni_pangolinsolo123: ## Evaluate PangolinOmni model trained on Pan
 		wait
 	done
 
-eval_pangolinsolo_pangolinsolo4: ## Evaluate PangolinSolo model trained on PangolinSolo testis dataset (single tissue input and output)
+test_pangolinsolo_pangolinsolo4: ## Evaluate PangolinSolo model trained on PangolinSolo testis dataset (single tissue input and output)
 	ckpt_dir=checkpoints/pangolinsolo.pangolinsolo4_2025-10-27_16-15-32_8l8omvzn
 	ckpt_path="$${ckpt_dir}/best.ckpt"
 	tissues=(liver)
@@ -167,7 +167,7 @@ eval_pangolinsolo_pangolinsolo4: ## Evaluate PangolinSolo model trained on Pango
 		wait
 	done
 
-eval_pangolinsolo_pangolinsolo3: ## Evaluate PangolinSolo model trained on PangolinSolo testis dataset (single tissue input and output)
+test_pangolinsolo_pangolinsolo3: ## Evaluate PangolinSolo model trained on PangolinSolo testis dataset (single tissue input and output)
 	ckpt_dir=checkpoints/pangolinsolo.pangolinsolo3_2025-10-29_03-43-28_l9t6a1nc
 	ckpt_path="$${ckpt_dir}/best.ckpt"
 	tissues=(liver)
@@ -189,7 +189,7 @@ eval_pangolinsolo_pangolinsolo3: ## Evaluate PangolinSolo model trained on Pango
 		wait
 	done
 
-eval_pangolinsolo_pangolinsolo2: ## Evaluate PangolinSolo model trained on PangolinSolo liver dataset (single tissue input and output)
+test_pangolinsolo_pangolinsolo2: ## Evaluate PangolinSolo model trained on PangolinSolo liver dataset (single tissue input and output)
 	ckpt_dir=checkpoints/pangolinsolo.pangolinsolo2_2025-10-29_05-02-24_4wltwlym
 	ckpt_path="$${ckpt_dir}/best.ckpt"
 	tissues=(liver)
@@ -211,7 +211,7 @@ eval_pangolinsolo_pangolinsolo2: ## Evaluate PangolinSolo model trained on Pango
 		wait
 	done
 
-eval_pangolinsolo_pangolinsolo1: ## Evaluate PangolinSolo model trained on PangolinSolo heart dataset (single tissue input and output)
+test_pangolinsolo_pangolinsolo1: ## Evaluate PangolinSolo model trained on PangolinSolo heart dataset (single tissue input and output)
 # 	ckpt_dir=checkpoints/pangolinsolo_pangolin_2025-10-18_12-41-38_btn1jd24
 	ckpt_dir=checkpoints/pangolinsolo.pangolinsolo1_2025-10-25_11-46-07_cqw6jfnv
 	ckpt_path="$${ckpt_dir}/best.ckpt"
@@ -260,7 +260,7 @@ eval_pangolinsolo_pangolinsolo1: ## Evaluate PangolinSolo model trained on Pango
 # 		done
 # 	done
 
-eval_pangolinorig_ensemble_pangolin: ## Evaluate Pangolin original ensemble average
+test_pangolinorig_ensemble_pangolin: ## Evaluate Pangolin original ensemble average
 	# Run Pangolin model (final.modelnum.tissue.epoch) on Pangolin dataset
 	model_dir=benchmarks/pangolin_models
 	conda run --no-capture-output --name $(CONDA_ENV_NAME) \
@@ -279,7 +279,7 @@ eval_pangolinorig_ensemble_pangolin: ## Evaluate Pangolin original ensemble aver
 		+dataset.tissue_types=[heart,liver,brain,testis] \
 		debug=$(debug)
 
-eval_pangolin_pangolin: ## Evaluate Pangolin model trained on Pangolin dataset (quad inputs and outputs)
+test_pangolin_pangolin: ## Evaluate Pangolin model trained on Pangolin dataset (quad inputs and outputs)
 	ckpt_dir="checkpoints/pangolin.pangolin_2025-10-21_22-16-17_mnsgbck4"
 	conda run --no-capture-output --name $(CONDA_ENV_NAME) \
 	python -u run.py stage=eval \
@@ -295,7 +295,7 @@ eval_pangolin_pangolin: ## Evaluate Pangolin model trained on Pangolin dataset (
 		+dataset.tissue_types=[heart,liver,brain,testis] \
 		debug=$(debug)
 
-eval_pangolinorig_pangolin: ## Evaluate Pangolin original model
+test_pangolinorig_pangolin: ## Evaluate Pangolin original model
 	# Run Pangolin model (final.modelnum.tissue.epoch) on Pangolin dataset
 	#	dataset.predict_path=data/pangolin/dataset_train_all.h5 \
 	models=(final.1.3.3 final.2.3.3 final.3.3.3 final.4.3.3 final.5.3.3 final.1.3.3.v2 final.2.3.3.v2 final.3.3.3.v2)
