@@ -55,6 +55,7 @@ class OmniDataModule(LightningDataModule):
                           prefetch_factor=self.cfg.get('train_prefetch_factor', 2),
                           pin_memory=self.cfg.get('train_pin_memory', True),
                           persistent_workers=self.cfg.get('train_persistent_workers', True),
+                          drop_last=self.cfg.get('train_drop_last', True),
                           **dataloader_cfg
                           )
     def val_dataloader(self):

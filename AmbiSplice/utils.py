@@ -7,6 +7,7 @@ https://github.com/microsoft/protein-frame-flow/blob/main/experiments/utils.py
 
 import numbers
 import os
+import psutil
 import yaml
 import socket
 import logging
@@ -40,6 +41,36 @@ def get_rank():
             return int(rank)
     # None to differentiate whether an environment variable was set at all
     return None
+
+
+def get_system_ram_usage():
+    """ Returns the system RAM usage as a percentage. """
+    mem = psutil.virtual_memory()
+    
+    # Convert bytes to Gigabytes (or Megabytes if preferred)
+    total_gb = round(mem.total / (1024**3), 2)
+    used_gb = round(mem.used / (1024**3), 2)
+    available_gb = round(mem.available / (1024**3), 2)
+    percent_used = mem.percent
+
+    print(f"Total RAM: {total_gb} GB")
+    print(f"Used RAM: {used_gb} GB")
+    print(f"Available RAM: {available_gb} GB")
+    print(f"Percentage Used: {percent_used}%")
+    
+    return mem    
+    if os.name == 'nt':
+        return psutil.virtual_memory().percent
+    else:
+        with open('/proc/meminfo', 'r') as f:
+            meminfo = f.readlines()
+        mem_total = float(meminfo[0].split()[1])
+        mem_free = float(meminfo[1].split()[1])
+        mem_available = float(meminfo[2].split()[1])
+        mem_used = mem_total - mem_available
+        mem_usage_percent = (mem_used / mem_total) * 100.0
+        return mem_usage_percent
+
 
 
 def has_wandb_connectivity(host="api.wandb.ai", port=443, timeout=2.0):
