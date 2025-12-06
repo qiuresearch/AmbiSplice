@@ -13,6 +13,7 @@ CONDA_ENV_NAME?=ambisplice
 
 gpus=0
 debug=false
+wandb=online
 train_len=null
 val_len=null
 test_len=null
@@ -416,6 +417,7 @@ train_pangolinomni_pangolinsolo123: ## Train PangolinOmni model on PangolinSolo 
 		datamodule.train_batch_size=96 \
 		datamodule.val_batch_size=128 \
 		litrun.resume_from_ckpt=null \
+		litrun.wandb.mode=$(wandb) \
 		debug=$(debug)
 
 train_pangolinomni2_pangolinsolo123: sbatch_redirect ## Train PangolinOmni2 model on PangolinSolo dataset

@@ -565,6 +565,7 @@ class OmniRunModule(LightningModule):
         if debug: # set wand
             ilogger.info("Debug mode (without wandb and callbacks)...")
             wandb_logger = None
+            # cfg.wandb.mode = 'offline'
             save_dir = os.path.join(ckpt_home, f'debug_{date_string}')
             checkpoints_cfg['dirpath'] = save_dir
         else:
@@ -572,10 +573,9 @@ class OmniRunModule(LightningModule):
             cfg.wandb.name = f'{cfg.wandb.name}_{date_string}'
             wandb_logger = WandbLogger(**cfg.wandb)
             ilogger.info(f"Wandb logger initialized with name: {wandb_logger.experiment.name}, id: {wandb_logger.experiment.id}")
+            save_dir = os.path.join(ckpt_home, f'{cfg.wandb.name}_{wandb_logger.experiment.id}')
 
-            if cfg.resume_from_ckpt is None:
-                save_dir = os.path.join(ckpt_home, f'{cfg.wandb.name}_{wandb_logger.experiment.id}')
-            else:
+            if cfg.resume_from_ckpt:
                 save_dir = os.path.dirname(cfg.resume_from_ckpt)
                 # ckpt_dir = os.path.join(ckpt_dir, wandb_logger.experiment.id, cfg.wandb.name)
 
