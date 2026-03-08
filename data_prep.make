@@ -7,9 +7,6 @@ SHELL := /bin/bash
 MAKEFLAGS += --always-make
 
 # Use ENV_VAR if set, otherwise default to "default_value"
-CONDA_PREFIX?=$(HOME)/miniconda3
-CONDA_SH_PATH?=$(CONDA_PREFIX)/etc/profile.d/conda.sh
-CONDA_ENV_NAME?=ambisplice
 
 gpus=0
 debug=false
@@ -34,17 +31,6 @@ sbatch_redirect: ## Redirect the action to sbatch instead of interactive running
 		sbatch "$${sbatch_file}.sh" ; \
 		exit 1 ; \
 	fi
-
-install: ## Install python dependencies under conda environment
-	source $(CONDA_SH_PATH)
-	conda create -n $(CONDA_ENV_NAME) python=3.11 -y
-	conda activate $(CONDA_ENV_NAME)
-	# Install PyTorch with CUDA 12.6 support
-	pip install torch==2.6.0 torchvision==0.21.0 torchaudio==2.6.0 --index-url https://download.pytorch.org/whl/cu126
-	pip install lightning
-	pip install lightning[extra]
-	conda install -c conda-forge pandas numpy hydra-core omegaconf wandb gputil matplotlib beartype h5py pytables -y
-	conda install mappy -c bioconda -y
 
 download_pangolin_genomes: ## Download Pangolin genomes
 	# Download human and mouse genomes from Gencode (or Ensembl)
@@ -87,98 +73,42 @@ rnaseq_test_nextflow: ## run nextflow test on rnaseq data
 
 entex_rnaseq_fastq_nextflow: ## EnTEX dataset RNA-seq processing with nextflow
 	data_dir=entex/downloads_sample_name
-	nf_files=($$(ls $${data_dir}/P*_RNA-seq_fastq_nextflow.csv))
+	nf_files=($$(ls $${data_dir}/*_RNA-seq_fastq_nextflow.csv))
 
 # 			--additional_fasta to add spike-in sequences (e.g. ERCC), but conflict with --transcript_fast option
 # 			--fasta  Homo_sapiens.GRCh38.dna_sm.primary_assembly.fa.gz \
 # 			--gtf Homo_sapiens.GRCh38.115.gtf.gz \
+
 # run it once with save_reference and then use the saved gene_bed, transcriptome fasta, star and salmon indices
-	for ((i=0; i<$${#nf_files[@]}; i++)) ; do
+
+	for ((i=1; i<$${#nf_files[@]}; i++)) ; do
 		tissue_type=$$(basename -s _RNA-seq_fastq_nextflow.csv $${nf_files[i]})
 		echo "nextflow file: $${nf_files[i]}; tissue: $${tissue_type}"
-		nextflow run nf-core/rnaseq -r 3.22.2 \
+		nextflow run nf-core/rnaseq -r 3.23.0 \
 			-profile docker \
 			--input $${nf_files[i]} \
 			--outdir entex/RNA-seq_dataset/$${tissue_type} \
-			--gencode \
-			--fasta GRCh38.primary_assembly.genome.fa.gz \
-			--gtf gencode.v49.primary_assembly.annotation.gtf.gz \
 			--aligner star_salmon \
 			--stringtie_ignore_gtf true \
 			--save_reference \
-			--save_align_intermeds
-# 			--gene_bed \
-# 			--transcript_fasta \
-#           --rsem_index \
-# 			--star_index \
-# 			--salmon_index \
+			--gencode \
+			--fasta nextflow_refdata/GRCh38.primary_assembly.genome.fa \
+			--gtf nextflow_refdata/gencode.v49.primary_assembly.annotation.gtf \
+			--transcript_fasta nextflow_refdata/genome.transcripts.fa \
+			--gene_bed nextflow_refdata/gencode.v49.primary_assembly.annotation.filtered.bed \
+			--rsem_index nextflow_refdata/rsem \
+			--star_index nextflow_refdata/index/star \
+			--salmon_index nextflow_refdata/index/salmon
+
+# 			--gtf gencode.v49.primary_assembly.annotation.gtf.gz \
+# 			--fasta GRCh38.primary_assembly.genome.fa.gz \
 #           --max_cpus \
-#           --skip_alignment	
+
+# 			--save_align_intermeds \
+#           --skip_alignment 
 #           -resume
 # --extra_star_align_args "--alignIntronMax 1000000 --alignIntronMin 20 --alignMatesGapMax 1000000 --alignSJoverhangMin 8 --outFilterMismatchNmax 999 --outFilterMultimapNmax 20 --outFilterType BySJout --outFilterMismatchNoverLmax 0.1 --clip3pAdapterSeq AAAAAAAA"
 # --extra_salmon_quant_args "--noLengthCorrection"
 		break
 # 		wait
 	done
-
-test_pangolinomni2_pangolinsolo123: ## Evaluate PangolinOmni2 model trained on PangolinSolo123 dataset
-	ckpt_dir=checkpoints/pangolinomni2.pangolinsolo123_2025-10-27_07-27-47_933otwx4
-	ckpt_path="$${ckpt_dir}/best.ckpt"
-	tissues=(liver)
-	tissues=(heart liver brain testis)
-	tissues=(heart liver brain testis "heart,liver,brain,testis")	
-	for ((i=0; i<$${#tissues[@]}; i++)) ; do
-		conda run --no-capture-output --name $(CONDA_ENV_NAME) \
-		python -u run.py stage=eval \
-			infer.save_prefix=$${ckpt_dir}/pangolin_test_$${tissues[i]//,/-} \
-			infer.save_level=2 infer.eval_dim=null \
-			model.type=pangolinomni2 \
-			model.state_dict_path=null \
-			litrun.resume_from_ckpt="$${ckpt_path}" \
-			dataset.type=pangolinsolo \
-			dataset.train_path=null \
-			dataset.predict_epoch_length=$(predict_len) \
-			dataset.predict_path=data/pangolin/dataset_test_1.h5 \
-			+dataset.tissue_types=[$${tissues[i]}] \
-			+dataset.tissue_embedding_path="data/tissue_avg_pca_embeddings.csv" \
-			debug=$(debug)
-		wait
-	done
-
-test_pangolinorig_pangolin: ## Evaluate Pangolin original model
-	# Run Pangolin model (final.modelnum.tissue.epoch) on Pangolin dataset
-	#	dataset.predict_path=data/pangolin/dataset_train_all.h5 \
-	models=(final.1.3.3 final.2.3.3 final.3.3.3 final.4.3.3 final.5.3.3 final.1.3.3.v2 final.2.3.3.v2 final.3.3.3.v2)
-	models+=(final.1.4.3 final.2.4.3 final.3.4.3 final.4.4.3 final.5.4.3 final.1.4.3.v2 final.2.4.3.v2 final.3.4.3.v2)
-	models=(final.1.0.3 final.2.0.3 final.3.0.3 final.4.0.3 final.5.0.3 final.1.0.3.v2 final.2.0.3.v2 final.3.0.3.v2)
-# 	models=(final.1.1.3 final.2.1.3 final.3.1.3 final.4.1.3 final.5.1.3 final.1.1.3.v2 final.2.1.3.v2 final.3.1.3.v2)
-# 	models+=(final.1.2.3 final.2.2.3 final.3.2.3 final.4.2.3 final.5.2.3 final.1.2.3.v2 final.2.2.3.v2 final.3.2.3.v2)	
-	for model in $${models[@]} ; do
-		conda run --no-capture-output --name $(CONDA_ENV_NAME) \
-		python -u run.py stage=eval \
-			infer.save_prefix=benchmarks/pangolin_$${model}/pangolin_test \
-			infer.save_level=2 infer.eval_dim=-2 \
-			model.type=pangolin \
-			model.state_dict_path=benchmarks/pangolin_models/$${model} \
-			litrun.resume_from_ckpt=null \
-			ensemble.enable=false \
-			dataset.type=pangolin \
-			dataset.predict_path=data/pangolin/dataset_test_1.h5 \
-			dataset.predict_epoch_length=$(predict_len) \
-			+dataset.tissue_types=[heart,liver,brain,testis] \
-			debug=$(debug)
-	done
-
-train_pangolinsolo_pangolinsolo123: ## Train PangolinSolo model on PangolinSolo dataset
-	conda run --no-capture-output --name $(CONDA_ENV_NAME) \
-	python -u run.py stage=train gpus=[$(gpus)] \
-		run_name=pangolinsolo.pangolinsolo123 \
-		model.type=pangolinsolo \
-		model.state_dict_path=null \
-		dataset.type=pangolinsolo \
-		+dataset.tissue_types=[heart,liver,brain] \
-		dataset.train_path=data/pangolin/dataset_train_all.h5 \
-		datamodule.train_batch_size=96 \
-		datamodule.val_batch_size=128 \
-		litrun.resume_from_ckpt=null \
-		debug=$(debug)
