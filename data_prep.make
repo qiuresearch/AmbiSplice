@@ -1,10 +1,10 @@
 .ONESHELL:
 SHELL := /bin/bash
 .DEFAULT_GOAL := help
-# .PHONY: all help clean test_pangolin test_human pangolin_test
 # This tells make to always run the recipe for the requested targets,
 # regardless of whether a file with that name exists, thus no needs for .PHONY declaration.
 MAKEFLAGS += --always-make
+# .PHONY: all help clean test_pangolin test_human pangolin_test
 
 # Use ENV_VAR if set, otherwise default to "default_value"
 
@@ -56,6 +56,8 @@ download_pangolin_genomes: ## Download Pangolin genomes
 download_gencode_references: ## Download GENCODE reference genome and transcriptome
 	wget -c --no-proxy -L https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_49/GRCh38.primary_assembly.genome.fa.gz
 	wget -c --no-proxy -L https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_49/gencode.v49.primary_assembly.annotation.gtf.gz
+	wget -c --no-proxy -L https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_49/gencode.v49.primary_assembly.annotation.gff3.gz
+
 # 	gunzip GRCh38.primary_assembly.genome.fa.gz &
 # 	wget --no-proxy -L https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_mouse/release_M25/GRCm38.primary_assembly.genome.fa.gz
 # 	gunzip GRCm38.primary_assembly.genome.fa.gz &
@@ -75,40 +77,41 @@ entex_rnaseq_fastq_nextflow: ## EnTEX dataset RNA-seq processing with nextflow
 	data_dir=entex/downloads_sample_name
 	nf_files=($$(ls $${data_dir}/*_RNA-seq_fastq_nextflow.csv))
 
-# 			--additional_fasta to add spike-in sequences (e.g. ERCC), but conflict with --transcript_fast option
-# 			--fasta  Homo_sapiens.GRCh38.dna_sm.primary_assembly.fa.gz \
-# 			--gtf Homo_sapiens.GRCh38.115.gtf.gz \
-
-# run it once with save_reference and then use the saved gene_bed, transcriptome fasta, star and salmon indices
-
-	for ((i=1; i<$${#nf_files[@]}; i++)) ; do
+	for ((i=0; i<$${#nf_files[@]}; i++)) ; do
 		tissue_type=$$(basename -s _RNA-seq_fastq_nextflow.csv $${nf_files[i]})
 		echo "nextflow file: $${nf_files[i]}; tissue: $${tissue_type}"
 		nextflow run nf-core/rnaseq -r 3.23.0 \
+			-resume \
 			-profile docker \
+			-work-dir $${HOME}/nextflow_cache \
 			--input $${nf_files[i]} \
 			--outdir entex/RNA-seq_dataset/$${tissue_type} \
 			--aligner star_salmon \
 			--stringtie_ignore_gtf true \
-			--save_reference \
 			--gencode \
-			--fasta nextflow_refdata/GRCh38.primary_assembly.genome.fa \
-			--gtf nextflow_refdata/gencode.v49.primary_assembly.annotation.gtf \
+			--fasta            nextflow_refdata/GRCh38.primary_assembly.genome.fa \
+			--gtf              nextflow_refdata/gencode.v49.primary_assembly.annotation.gtf \
 			--transcript_fasta nextflow_refdata/genome.transcripts.fa \
-			--gene_bed nextflow_refdata/gencode.v49.primary_assembly.annotation.filtered.bed \
-			--rsem_index nextflow_refdata/rsem \
-			--star_index nextflow_refdata/index/star \
-			--salmon_index nextflow_refdata/index/salmon
-
-# 			--gtf gencode.v49.primary_assembly.annotation.gtf.gz \
+			--gene_bed         nextflow_refdata/gencode.v49.primary_assembly.annotation.filtered.bed \
+			--rsem_index       nextflow_refdata/rsem \
+			--star_index       nextflow_refdata/index/star \
+			--salmon_index     nextflow_refdata/index/salmon
+			
+# run it once with save_reference and then use the saved gene_bed, transcriptome fasta, star and salmon indices
 # 			--fasta GRCh38.primary_assembly.genome.fa.gz \
+# 			--gtf   gencode.v49.primary_assembly.annotation.gtf.gz \
+# 			--save_reference
+			
 #           --max_cpus \
-
 # 			--save_align_intermeds \
 #           --skip_alignment 
-#           -resume
-# --extra_star_align_args "--alignIntronMax 1000000 --alignIntronMin 20 --alignMatesGapMax 1000000 --alignSJoverhangMin 8 --outFilterMismatchNmax 999 --outFilterMultimapNmax 20 --outFilterType BySJout --outFilterMismatchNoverLmax 0.1 --clip3pAdapterSeq AAAAAAAA"
-# --extra_salmon_quant_args "--noLengthCorrection"
+#           --extra_star_align_args "--alignIntronMax 1000000 --alignIntronMin 20 --alignMatesGapMax 1000000 --alignSJoverhangMin 8 --outFilterMismatchNmax 999 --outFilterMultimapNmax 20 --outFilterType BySJout --outFilterMismatchNoverLmax 0.1 --clip3pAdapterSeq AAAAAAAA"
+#           --extra_salmon_quant_args "--noLengthCorrection"
+#
+# 			--additional_fasta to add spike-in sequences (e.g. ERCC), but conflict with --transcript_fast option
+# 			--fasta  Homo_sapiens.GRCh38.dna_sm.primary_assembly.fa.gz \ # for use of ensembl references
+# 			--gtf Homo_sapiens.GRCh38.115.gtf.gz \
+
 		break
-# 		wait
+		wait
 	done
