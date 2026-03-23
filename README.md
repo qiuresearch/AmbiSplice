@@ -21,7 +21,7 @@ conda install -c conda-forge pandas numpy hydra-core omegaconf wandb gputil matp
 ```
 ## Datasets
 ### Pangolin original data
-1. Pangolin_train github repo provides the following intermediate files:
+Pangolin_train github repo provides the following intermediate files:
 - splice_table_Human.test.txt  
 - splice_table_Human.txt  
 - splice_table_Macaque.txt  
@@ -30,17 +30,21 @@ conda install -c conda-forge pandas numpy hydra-core omegaconf wandb gputil matp
 - orthologs.txt
 - paralogs.txt
 
-We can use them to generate training data instead of repeating all data processing pipelines starting from RNA-seq raw reads,
+These files can be used to generate the original training data instead of repeating all data processing pipelines starting from RNA-seq raw reads by the following steps:
 
-2. Download the genomes by running "make pangolin_download_genomes",
+1. Download genome and annotation data by running "make download_pangolin_genomes"
 
-3. Ideally, one only needs to run one script: create_files.sh in the preprocessing folder. Some additional python pacakges may need to be installed. You should get:
+2. Move the files to data/pangolin
+
+3. Ideally, one only needs to run one script: create_files.sh in data/pangolin. Some additional python pacakges may need to be installed. You should get:
 - dataset_train_all.h5 (>400G)
 - dataset_test_1.h5 (>50G)
 
 Note that some python scripts from Pangolin_train have been modified in order to run in newer python versions.
 
 ### Spliser processing
+
+
 
 ### Majiq processing
 

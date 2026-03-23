@@ -70,14 +70,17 @@ download_ensembl_references: ## Download ensembl reference genome and transcript
 	wget -c --no-proxy -L ftp://ftp.ensembl.org/pub/release-$${latest_release}/fasta/homo_sapiens/dna/Homo_sapiens.GRCh38.dna_sm.primary_assembly.fa.gz
 	wget -c --no-proxy -L ftp://ftp.ensembl.org/pub/release-$${latest_release}/gtf/homo_sapiens/Homo_sapiens.GRCh38.$${latest_release}.gtf.gz
 
-rnaseq_test_nextflow: ## run nextflow test on rnaseq data
-	nextflow run nf-core/rnaseq -profile test_full,docker --outdir test
+nextflow_rnaseq_test_docker: ## run nextflow test on rnaseq data with docker
+	nextflow run nf-core/rnaseq -r 3.23.0 -profile test_full,docker --outdir test --max_cpus 6
 
-entex_rnaseq_fastq_nextflow: ## EnTEX dataset RNA-seq processing with nextflow
+nextflow_rnaseq_test_singularity: ## run nextflow test on rnaseq data with singularity
+	nextflow run nf-core/rnaseq -r 3.23.0 -profile test_full,singularity --outdir test --max_cpus 6
+
+entex_nextflow_rnaseq_fastq: ## EnTEX dataset RNA-seq processing with nextflow
 	data_dir=entex/downloads_sample_name
 	nf_files=($$(ls $${data_dir}/*_RNA-seq_fastq_nextflow.csv))
 
-	for ((i=0; i<$${#nf_files[@]}; i++)) ; do
+	for ((i=28; i<$${#nf_files[@]}; i++)) ; do
 		tissue_type=$$(basename -s _RNA-seq_fastq_nextflow.csv $${nf_files[i]})
 		echo "nextflow file: $${nf_files[i]}; tissue: $${tissue_type}"
 		nextflow run nf-core/rnaseq -r 3.23.0 \
@@ -96,22 +99,50 @@ entex_rnaseq_fastq_nextflow: ## EnTEX dataset RNA-seq processing with nextflow
 			--rsem_index       nextflow_refdata/rsem \
 			--star_index       nextflow_refdata/index/star \
 			--salmon_index     nextflow_refdata/index/salmon
+# 			--use_parabricks_star \
 			
 # run it once with save_reference and then use the saved gene_bed, transcriptome fasta, star and salmon indices
 # 			--fasta GRCh38.primary_assembly.genome.fa.gz \
 # 			--gtf   gencode.v49.primary_assembly.annotation.gtf.gz \
 # 			--save_reference
 			
+# --gpu_container_options '--gpus 1'			
 #           --max_cpus \
 # 			--save_align_intermeds \
 #           --skip_alignment 
-#           --extra_star_align_args "--alignIntronMax 1000000 --alignIntronMin 20 --alignMatesGapMax 1000000 --alignSJoverhangMin 8 --outFilterMismatchNmax 999 --outFilterMultimapNmax 20 --outFilterType BySJout --outFilterMismatchNoverLmax 0.1 --clip3pAdapterSeq AAAAAAAA"
+# Default STAR maxIntronMax is 1000000, reduced to 100000 for better performance and less false positives
+# Min 20 and Max 100000 are used in the original Spliser article for human (20 and 6000 for Arabidopsis)
+#           --extra_star_align_args "--alignIntronMax 100000 --alignIntronMin 20 --alignMatesGapMax 1000000 --alignSJoverhangMin 8 --outFilterMismatchNmax 999 --outFilterMultimapNmax 20 --outFilterType BySJout --outFilterMismatchNoverLmax 0.1 --clip3pAdapterSeq AAAAAAAA"
 #           --extra_salmon_quant_args "--noLengthCorrection"
 #
 # 			--additional_fasta to add spike-in sequences (e.g. ERCC), but conflict with --transcript_fast option
 # 			--fasta  Homo_sapiens.GRCh38.dna_sm.primary_assembly.fa.gz \ # for use of ensembl references
 # 			--gtf Homo_sapiens.GRCh38.115.gtf.gz \
 
-		break
+# 		break
 		wait
 	done
+
+entex_spliser_rnaseq: ## EnTEX dataset RNA-seq processing with SpliSer
+	echo 'Skip collectBamStats...' || \
+	ppl_omics.sh spliser_collectBamStats \
+		-home_dir entex \
+		-glob_file multiqc_fail_strand_check_table.txt \
+		-save_dir entex/spliser
+
+	echo 'Skip preCombineIntrons...' || \
+	ppl_omics.sh splier_preCombineIntrons \
+		-home_dir entex \
+		-bam_name '*.markdup.sorted.bam' \
+		-gff3 gencode.v49.primary_assembly.annotation.gff3 \
+		-strand_opt ' --isStranded -s rf' \
+		-save_dir entex/spliser
+
+	# echo 'Skip processBamFiles...' || \
+	ppl_omics.sh spliser_processBamFiles \
+		-home_dir entex \
+		-bam_name '*.markdup.sorted.bam' \
+		-gff3 gencode.v49.primary_assembly.annotation.gff3 \
+		-strand_opt ' --isStranded -s rf' \
+		-intron_tsv entex/spliser.introns.tsv \
+		-ncpus 4
