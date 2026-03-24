@@ -211,5 +211,6 @@ wandb
 outputs
 .nextflow.*
 AmbiSplice/attic
-data/
+data/*/
+# data/*.*
 .vscode

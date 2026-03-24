@@ -9,10 +9,12 @@ MAKEFLAGS += --always-make
 # Use ENV_VAR if set, otherwise default to "default_value"
 
 gpus=0
+cpus=$(shell echo "scale=0; m=$$(nproc)/2; if(m<12) m else 12" | bc)
 debug=false
 sbatch=false
 partition=small-gpu
 time=7-00:00:00
+profile=docker
 
 help: ## Display this help message
 	@echo "Usage: make <target>"
@@ -31,6 +33,11 @@ sbatch_redirect: ## Redirect the action to sbatch instead of interactive running
 		sbatch "$${sbatch_file}.sh" ; \
 		exit 1 ; \
 	fi
+load_nextflow_modules: ## Load necessary modules (if using a cluster with module system)
+	if ! command -v java &> /dev/null ; then module load jdk ; fi
+	if ! command -v singularity &> /dev/null ; then module load singularity ; fi
+
+	# Add other modules as needed
 
 download_pangolin_genomes: ## Download Pangolin genomes
 	# Download human and mouse genomes from Gencode (or Ensembl)
@@ -70,22 +77,19 @@ download_ensembl_references: ## Download ensembl reference genome and transcript
 	wget -c --no-proxy -L ftp://ftp.ensembl.org/pub/release-$${latest_release}/fasta/homo_sapiens/dna/Homo_sapiens.GRCh38.dna_sm.primary_assembly.fa.gz
 	wget -c --no-proxy -L ftp://ftp.ensembl.org/pub/release-$${latest_release}/gtf/homo_sapiens/Homo_sapiens.GRCh38.$${latest_release}.gtf.gz
 
-nextflow_rnaseq_test_docker: ## run nextflow test on rnaseq data with docker
-	nextflow run nf-core/rnaseq -r 3.23.0 -profile test_full,docker --outdir test --max_cpus 6
-
-nextflow_rnaseq_test_singularity: ## run nextflow test on rnaseq data with singularity
-	nextflow run nf-core/rnaseq -r 3.23.0 -profile test_full,singularity --outdir test --max_cpus 6
+nextflow_rnaseq_test: ## run nextflow test on rnaseq data
+	nextflow run nf-core/rnaseq -r 3.23.0 -profile test_full,$(profile) --outdir test --max_cpus 6
 
 entex_nextflow_rnaseq_fastq: ## EnTEX dataset RNA-seq processing with nextflow
 	data_dir=entex/downloads_sample_name
 	nf_files=($$(ls $${data_dir}/*_RNA-seq_fastq_nextflow.csv))
 
-	for ((i=28; i<$${#nf_files[@]}; i++)) ; do
+	for ((i=0; i<$${#nf_files[@]}; i++)) ; do
 		tissue_type=$$(basename -s _RNA-seq_fastq_nextflow.csv $${nf_files[i]})
 		echo "nextflow file: $${nf_files[i]}; tissue: $${tissue_type}"
 		nextflow run nf-core/rnaseq -r 3.23.0 \
 			-resume \
-			-profile docker \
+			-profile $(profile) \
 			-work-dir $${HOME}/nextflow_cache \
 			--input $${nf_files[i]} \
 			--outdir entex/RNA-seq_dataset/$${tissue_type} \

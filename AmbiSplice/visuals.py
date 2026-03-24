@@ -2,11 +2,57 @@ import os
 import yaml
 import datetime
 import numpy as np
+from collections import Counter
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 
 from . import utils
 
+
+def plot_encode_assay_sample_distribution(files_samples_df, 
+        assay_col='Assay term name', sample_col='Biosample name', 
+        name=None, assay_label='Assay Term Name', sample_label='Biosample Name', plot_path=None):
+
+    assay_counts = Counter(files_samples_df[assay_col])
+    assay_names = list(assay_counts.keys())
+    assay_values = [assay_counts[name] for name in assay_names]
+    # sort by values
+    assay_names, assay_values = zip(*sorted(zip(assay_names, assay_values), key=lambda x: x[1], reverse=True))
+    plt.figure(figsize=(10,6))
+    plt.bar(assay_names, assay_values)
+    # show the percentages on top of bars
+    total = sum(assay_values)
+    for i, v in enumerate(assay_values):
+        plt.text(i, v + 1, f"{v}\n({v/total:.1%})", ha='center', va='bottom', fontsize=10)
+    plt.xticks(rotation=45, ha='right')
+    plt.xlabel(assay_label)
+    plt.ylabel('Number of Files')
+    plt.title(f'Distribution of Assay Types (N={len(assay_names)}) in {name} Dataset')
+    plt.tight_layout()
+    # plt.savefig("data/entex/plots/entex_final_files_samples_assay_term_name_distribution.png")
+    plt.show()
+
+    # show the distrubtion of "Biosample name"
+    sample_counts = Counter(files_samples_df[sample_col])
+    sample_names = list(sample_counts.keys())
+    sample_values = [sample_counts[name] for name in sample_names]
+    # sort by values
+    sample_names, sample_values = zip(*sorted(zip(sample_names, sample_values), key=lambda x: x[1], reverse=True))
+    plt.figure(figsize=(10,6))
+    plt.bar(sample_names, sample_values)
+    # # show the percentages on top of bars
+    # total = sum(sample_values)
+    # for i, v in enumerate(sample_values):
+    #     plt.text(i, v + 1, f"{v}\n({v/total:.1%})", ha='center', va='bottom', fontsize=10)
+    plt.xticks(rotation=45, ha='right')
+    plt.xlabel(sample_label)
+    plt.ylabel('Number of Files')
+    plt.title(f'Distribution of Biosample Names (N={len(sample_names)}) in {name} Dataset')
+    plt.tight_layout()
+    # plt.savefig("data/entex/plots/entex_final_files_samples_biosample_name_distribution.png")
+    plt.show()
+
+    
 def plot_train_feats(feats, tissue_idx=0, meta_dict={}):
 
     fig, axes = plt.subplots(nrows=3, sharex=True, figsize=(16, 6))
