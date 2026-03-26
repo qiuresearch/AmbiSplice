@@ -172,7 +172,7 @@ nextflow_rnaseq_fastq: sbatch_redirect ## RNA-seq processing with nextflow
 			--input $${nf_file} \
 			--outdir ./ \
 			--aligner star_salmon \
-            --extra_star_align_args "--alignIntronMax 100000 --alignIntronMin 20"
+            --extra_star_align_args "--alignIntronMax 100000 --alignIntronMin 20" \
 			--use_parabricks_star $(use_parabricks_star) \
 			--stringtie_ignore_gtf true \
 			--gencode \
