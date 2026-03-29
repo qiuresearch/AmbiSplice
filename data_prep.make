@@ -110,11 +110,6 @@ nextflow_rnaseq_fastq: sbatch_redirect ## RNA-seq processing with nextflow
 
 	@if ! command -v java &> /dev/null ; then module load jdk ; fi
 	@echo "java path: $$(which java)"
-	@if ! command -v nextflow &> /dev/null ; then
-		echo "Nextflow is not available. Please install it first."
-		exit 1
-	fi
-	@echo "nextflow path: $$(which nextflow)"
 	@if [ "$(profile)" = "docker" ] ; then 
 		if ! command -v docker &> /dev/null ; then module load docker ; fi
 		echo "docker path: $$(which docker)"
@@ -125,6 +120,11 @@ nextflow_rnaseq_fastq: sbatch_redirect ## RNA-seq processing with nextflow
 		echo "Unknown profile: $(profile)"
 		exit 1
 	fi
+	@if ! command -v nextflow &> /dev/null ; then
+		echo "Nextflow is not available. Please install it first."
+		exit 1
+	fi
+	@echo "nextflow path: $$(which nextflow)"
 
 	nf_files=($$(ls $(data_dir)/*_RNA-seq_fastq_nextflow.csv))
 	if [ $(iend) -lt 0 ] || [ $(iend) -gt $${#nf_files[@]} ] ; then iend=$${#nf_files[@]} ; else iend=$(iend) ; fi
@@ -139,16 +139,16 @@ nextflow_rnaseq_fastq: sbatch_redirect ## RNA-seq processing with nextflow
 
 	echo "Using profile: $(profile); use_parabricks_star: $(use_parabricks_star); cpus: $(cpus); gpus: $(gpus); debug: $(debug)"
 	echo data_dir: $(data_dir), out_dir: $(out_dir)
-	echo nf_files: $${nf_files[@]}
-	echo "Processing files from index $(istart) to $${iend} (total: $${#nf_files[@]})"
+	echo "nf_files (total: $${#nf_files[@]}): $${nf_files[@]}"
+	echo "Processing files from index $(istart) to $${iend}"
 	echo "Reference data files: "
-	echo "               fasta: $${fasta_path}"
-	echo "                 gtf: $${gtf_path}"
-	echo "    transcript_fasta: $${transcript_fasta_path}"
-	echo "            gene_bed: $${gene_bed_path}"
-	echo "          rsem_index: $${rsem_index_path}"
-	echo "          star_index: $${star_index_path}"
-	echo "        salmon_index: $${salmon_index_path}"
+	echo "               fasta: $$(realpath --relative-to=. -- $${fasta_path})"
+	echo "                 gtf: $$(realpath --relative-to=. -- $${gtf_path})"
+	echo "    transcript_fasta: $$(realpath --relative-to=. -- $${transcript_fasta_path})"
+	echo "            gene_bed: $$(realpath --relative-to=. -- $${gene_bed_path})"
+	echo "          rsem_index: $$(realpath --relative-to=. -- $${rsem_index_path})"
+	echo "          star_index: $$(realpath --relative-to=. -- $${star_index_path})"
+	echo "        salmon_index: $$(realpath --relative-to=. -- $${salmon_index_path})"
 
 	data_dir=$$(realpath $(data_dir))
 	for ((i=$(istart); i<=$${iend}; i++)) ; do
@@ -158,11 +158,11 @@ nextflow_rnaseq_fastq: sbatch_redirect ## RNA-seq processing with nextflow
 		tissue_dir=$(out_dir)/$${tissue_type}
 		mkdir -p $${tissue_dir}
 
-		echo "nextflow file: $${nf_files[i]}; tissue: $${tissue_type}"
+		echo "Nextflow run #$${i}: $${nf_files[i]}; tissue: $${tissue_type}"
 		pushd $${tissue_dir} > /dev/null
 
-		ln -s $$(realpath --relative-to=. -- $${nf_file}) ./
-		ln -s $$(realpath --relative-to=. -- $${data_dir}/$${tissue_type}) $${tissue_type}
+		ln -sf $$(realpath --relative-to=. -- $${nf_file}) ./
+		ln -sf $$(realpath --relative-to=. -- $${data_dir}/$${tissue_type}) $${tissue_type}
 		
 		nextflow run nf-core/rnaseq -r 3.23.0 \
 			-resume \
@@ -217,7 +217,7 @@ entex_spliser_rnaseq: ## EnTEX dataset RNA-seq processing with SpliSer
 	ppl_omics.sh splier_preCombineIntrons \
 		-home_dir entex \
 		-bam_name '*.markdup.sorted.bam' \
-		-gff3 gencode.v49.primary_assembly.annotation.gff3 \
+		-gff3 spliser_refdata/gencode.v49.primary_assembly.annotation.gff3 \
 		-strand_opt ' --isStranded -s rf' \
 		-save_dir entex/spliser
 
@@ -228,4 +228,4 @@ entex_spliser_rnaseq: ## EnTEX dataset RNA-seq processing with SpliSer
 		-gff3 gencode.v49.primary_assembly.annotation.gff3 \
 		-strand_opt ' --isStranded -s rf' \
 		-intron_tsv entex/spliser.introns.tsv \
-		-ncpus 4
+		-ncpus $(cpus)
