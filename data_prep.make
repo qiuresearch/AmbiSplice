@@ -27,11 +27,11 @@ help: ## Display this help message
 	@echo "Usage: make <target>"
 	@echo
 	@echo "Available options:"
-	@echo "  profile=singularity|docker"
-	@echo "  use_parabricks_star=true|false"
-	@echo "  gpus=N"
-	@echo "  cpus=N"
-	@echo "  debug=true|false"
+	@echo "  profile=singularity|docker (default: $(profile))"
+	@echo "  use_parabricks_star=true|false (default: $(use_parabricks_star))"
+	@echo "  gpus=N (default: $(gpus))"
+	@echo "  cpus=N (default: $(cpus))"
+	@echo "  debug=true|false (default: $(debug))"
 	@echo
 	@echo "Available targets:"
 	@grep -E '^[0-9a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-42s\033[0m %s\n", $$1, $$2}'
