@@ -97,18 +97,8 @@ download_ensembl_references: ## Download ensembl reference genome and transcript
 nextflow_rnaseq_test: nextflow_check ## run nextflow test on rnaseq data
 	nextflow run nf-core/rnaseq -r 3.23.0 -profile test_full,$(profile) --outdir test --max_cpus 6
 
-entex_nextflow_rnaseq_batch: data_dir=entex/downloads_sample_name
-entex_nextflow_rnaseq_batch: out_dir=entex/RNA-seq_dataset
-entex_nextflow_rnaseq_batch: url_list=$(data_dir)_cloud.urls
-entex_nextflow_rnaseq_batch: nextflow_rnaseq_batch ## EnTEX dataset RNA-seq processing with nextflow
-
-encode_nextflow_rnaseq_batch: data_dir=encode/downloads_organ
-encode_nextflow_rnaseq_batch: out_dir=encode/RNA-seq_dataset
-encode_nextflow_rnaseq_batch: url_list=$(data_dir)_cloud.urls
-encode_nextflow_rnaseq_batch: nextflow_rnaseq_batch ## Encode dataset RNA-seq processing with nextflow
-
 nextflow_rnaseq_batch: sbatch_redirect
-	ppl_omics.sh nextflow_rnaseq \
+	ppl_nextflow.sh nextflow_rnaseq \
 		-profile $(profile) \
 		-use_parabricks_star $(use_parabricks_star) \
 		-cpus $(cpus) \
@@ -119,6 +109,34 @@ nextflow_rnaseq_batch: sbatch_redirect
 		-istart $(istart) \
 		-iend $(iend) \
 		-debug $(debug)
+
+entex_nextflow_rnaseq_batch: data_dir=entex/downloads_sample_name
+entex_nextflow_rnaseq_batch: out_dir=entex/RNA-seq_dataset
+entex_nextflow_rnaseq_batch: url_list=$(data_dir)_cloud.urls
+entex_nextflow_rnaseq_batch: nextflow_rnaseq_batch ## EnTEX dataset RNA-seq processing with nextflow
+
+encode_nextflow_rnaseq_batch: data_dir=encode/downloads_organ
+encode_nextflow_rnaseq_batch: out_dir=encode/RNA-seq_dataset
+encode_nextflow_rnaseq_batch: url_list=$(data_dir)_cloud.urls
+encode_nextflow_rnaseq_batch: nextflow_rnaseq_batch ## Encode dataset RNA-seq processing with nextflow
+
+nextflow_atacseq_batch: sbatch_redirect
+	ppl_nextflow.sh nextflow_atacseq \
+		-profile $(profile) \
+		-use_parabricks_star $(use_parabricks_star) \
+		-cpus $(cpus) \
+		-gpus $(gpus) \
+		-data_dir $(data_dir) \
+		-out_dir $(out_dir) \
+		-url_list $(url_list) \
+		-istart $(istart) \
+		-iend $(iend) \
+		-debug $(debug)
+
+entex_nextflow_atacseq_batch: data_dir=entex/downloads_biosample_name
+entex_nextflow_atacseq_batch: out_dir=entex/ATAC-seq_dataset
+entex_nextflow_atacseq_batch: url_list=$(data_dir)_cloud.urls
+entex_nextflow_atacseq_batch: nextflow_atacseq_batch ## EnTEX dataset ATAC-seq processing with nextflow
 
 entex_spliser_rnaseq: ## EnTEX dataset RNA-seq processing with SpliSer
 	echo 'Skip collectBamStats...' || \
