@@ -23,20 +23,26 @@ partition=cpu
 mem=96G
 
 
-help: ## Display this help message
-	@echo "Usage: make <target>"
+help: # Display this help message
+	@echo "Usage: make <target(s)> [options]"
 	@echo
 	@echo "Available options:"
+	@echo "  istart=N (default: $(istart))"
+	@echo "  iend=N (default: $(iend))"
 	@echo "  profile=singularity|docker (default: $(profile))"
 	@echo "  use_parabricks_star=true|false (default: $(use_parabricks_star))"
 	@echo "  gpus=N (default: $(gpus))"
 	@echo "  cpus=N (default: $(cpus))"
+	@echo "  sbatch=true|false (default: $(sbatch))"
+	@echo "  partition=PARTITION (default: $(partition))"
+	@echo "  time=TIME (default: $(time))"
+	@echo "  mem=MEMORY (default: $(mem))"
 	@echo "  debug=true|false (default: $(debug))"
 	@echo
 	@echo "Available targets:"
 	@grep -E '^[0-9a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-42s\033[0m %s\n", $$1, $$2}'
 
-sbatch_redirect: ## Redirect the target action to sbatch (sbatch=true)
+sbatch_redirect: # Redirect the target action to sbatch (sbatch=true)
 	@if [ -n "$${SLURM_JOB_ID}" ] ; then exit 0 ; fi
 	@GOALOPT="istart=$(istart) iend=$(iend) profile=$(profile) cpus=$(cpus) gpus=$(gpus) debug=$(debug)"
 	@if [ "$(sbatch)" = "true" ] ; then
