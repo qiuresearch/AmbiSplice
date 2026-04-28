@@ -20,7 +20,7 @@ use_parabricks_star=false
 sbatch=false
 time=7-00:00:00
 partition=cpu
-mem=96G
+mem=128G
 
 
 help: # Display this help message
