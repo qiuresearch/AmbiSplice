@@ -13,27 +13,30 @@ gpus=0
 cpus=$(shell echo "scale=0; m=$$(nproc)/2; if(m<12) m else 12" | bc)
 
 istart=0
-iend=9999
+iend=999
 profile=singularity
 use_parabricks_star=false
 
 sbatch=false
+sbatch_size=10
 time=7-00:00:00
 partition=cpu
 mem=128G
-
 
 help: # Display this help message
 	@echo "Usage: make <target(s)> [options]"
 	@echo
 	@echo "Available options:"
-	@echo "  istart=N (default: $(istart))"
-	@echo "  iend=N (default: $(iend))"
+	@echo "  istart=N (inclusive, default: $(istart))"
+	@echo "  iend=N (inclusive, default: $(iend))"
 	@echo "  profile=singularity|docker (default: $(profile))"
 	@echo "  use_parabricks_star=true|false (default: $(use_parabricks_star))"
 	@echo "  gpus=N (default: $(gpus))"
 	@echo "  cpus=N (default: $(cpus))"
+	@echo ""
+	@echo "  --- Options for sbatch=true ---"
 	@echo "  sbatch=true|false (default: $(sbatch))"
+	@echo "  sbatch_size=N (default: $(sbatch_size))"
 	@echo "  partition=PARTITION (default: $(partition))"
 	@echo "  time=TIME (default: $(time))"
 	@echo "  mem=MEMORY (default: $(mem))"
@@ -44,21 +47,30 @@ help: # Display this help message
 
 sbatch_redirect: # Redirect the target action to sbatch (sbatch=true)
 	@if [ -n "$${SLURM_JOB_ID}" ] ; then exit 0 ; fi
-	@GOALOPT="istart=$(istart) iend=$(iend) profile=$(profile) cpus=$(cpus) gpus=$(gpus) debug=$(debug)"
 	@if [ "$(sbatch)" = "true" ] ; then
-		sbatch_file=sbatch
-		sbatch_cmds=(echo Starting...)
-		for goal in $(MAKECMDGOALS) ; do
-			sbatch_file=$${sbatch_file}_$${goal}_$(istart)_$(iend)
-			sbatch_cmds+=(\; make $${goal} $${GOALOPT})
+		final_end=$(iend)
+		chunk_start=$(istart)
+		chunk_end=$$((chunk_start  -1))
+		chunk_size=$(sbatch_size)
+
+		until [ "$${final_end}" -lt $${chunk_start} ] ; do
+			chunk_end=$$((chunk_start + chunk_size - 1))
+			GOALOPT="istart=$${chunk_start} iend=$${chunk_end} profile=$(profile) cpus=$(cpus) gpus=$(gpus) debug=$(debug)"
+			sbatch_file=sbatch
+			sbatch_cmds=(echo Starting...)
+			for goal in $(MAKECMDGOALS) ; do
+				sbatch_file=$${sbatch_file}_$${goal}_$${chunk_start}_$${chunk_end}
+				sbatch_cmds+=(\; make $${goal} $${GOALOPT})
+			done
+			sbatch_brew.sh -p $(partition) -t $(time) -ncpus $(cpus) -m $(mem) -o "$${sbatch_file}.sh" "$${sbatch_cmds[*]}"
+			if command -v sbatch &> /dev/null ; then
+				echo "Submitting via sbatch ... (ignore the 'sbatch: error message)"
+				sbatch "$${sbatch_file}.sh"
+			else
+				echo "sbatch command not found. Please submit $${sbatch_file}.sh manually"
+			fi
+			chunk_start=$$((chunk_end + 1))
 		done
-		sbatch_brew.sh -p $(partition) -t $(time) -ncpus $(cpus) -o "$${sbatch_file}.sh" "$${sbatch_cmds[*]}"
-		if command -v sbatch &> /dev/null ; then
-			echo "Submitting via sbatch ... (ignore the 'sbatch: error message)"
-			sbatch "$${sbatch_file}.sh"
-		else
-			echo "sbatch command not found. Please submit $${sbatch_file}.sh manually"
-		fi
 		exit 1
 	fi
 
