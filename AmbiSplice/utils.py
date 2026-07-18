@@ -72,7 +72,6 @@ def get_system_ram_usage():
         return mem_usage_percent
 
 
-
 def has_wandb_connectivity(host="api.wandb.ai", port=443, timeout=2.0):
     try:
         s = socket.create_connection((host, port), timeout)

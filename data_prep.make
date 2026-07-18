@@ -116,7 +116,7 @@ nextflow_rnaseq_test: nextflow_check ## run nextflow test on rnaseq data
 	nextflow run nf-core/rnaseq -r 3.23.0 -profile test_full,$(profile) --outdir test --max_cpus 6
 
 nextflow_rnaseq_batch: sbatch_redirect
-	ppl_nextflow.sh nextflow_rnaseq \
+	ppl_nextflow.sh rnaseq_run \
 		-profile $(profile) \
 		-use_parabricks_star $(use_parabricks_star) \
 		-cpus $(cpus) \
@@ -139,7 +139,7 @@ encode_nextflow_rnaseq_batch: url_list=$(data_dir)_cloud.urls
 encode_nextflow_rnaseq_batch: nextflow_rnaseq_batch ## Encode dataset RNA-seq processing with nextflow
 
 nextflow_atacseq_batch: sbatch_redirect
-	ppl_nextflow.sh nextflow_atacseq \
+	ppl_nextflow.sh atacseq_run \
 		-profile $(profile) \
 		-use_parabricks_star $(use_parabricks_star) \
 		-cpus $(cpus) \

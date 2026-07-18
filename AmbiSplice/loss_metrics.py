@@ -3,7 +3,7 @@ from tqdm import tqdm
 import numpy as np
 import torch
 import torch.nn.functional as F
-from AmbiSplice import utils
+from . import utils
 
 ilogger = utils.get_pylogger(os.path.basename(__name__))
 
