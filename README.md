@@ -1,4 +1,4 @@
-# AmbiSplice
+# ContextSplice
 Data-driven computational model to predict context-dependent splicing
 
 ## Install
@@ -9,9 +9,9 @@ or
 
 2. Run the following lines:
 ```
-conda create -n ambisplice python=3.11 -y
+conda create -n conextsplice python=3.11 -y
 
-conda activate ambisplice
+conda activate contextsplice
 
 pip install torch==2.6.0 torchvision==0.21.0 torchaudio==2.6.0 --index-url https://download.pytorch.org/whl/cu126
 
